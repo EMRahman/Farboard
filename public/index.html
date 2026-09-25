@@ -174,14 +174,6 @@
             <p class="modal-note" id="hostChecking">Checking where games can be hosted…</p>
 
             <div id="hostReady" hidden>
-              <p class="modal-note">
-                <span id="relayLine"></span> ·
-                <button type="button" class="link-btn" id="changeRelayBtn">Your own copy</button>
-                <span id="ownerLinkWrap">
-                  · <button type="button" class="link-btn" id="ownerLinkBtn">I'm the owner</button>
-                </span>
-              </p>
-              <p class="modal-note" id="hostStats" hidden></p>
               <fieldset class="color-choice">
                 <legend>You play</legend>
                 <label><input type="radio" name="hostColor" value="w" checked /> White</label>
@@ -189,6 +181,29 @@
                 <label><input type="radio" name="hostColor" value="random" /> Random</label>
               </fieldset>
               <button type="button" class="btn btn-primary" id="createInviteBtn">Create invite</button>
+              <p class="form-message bad" id="hostError" role="alert"></p>
+
+              <div class="host-notes">
+                <p class="modal-note" id="sharedNote">
+                  Games go through the
+                  <button type="button" class="link-btn" id="relayWhatBtn" aria-expanded="false" aria-controls="relayWhat">shared relay</button>.
+                  <span id="hostStats"></span>
+                </p>
+                <p class="modal-note relay-what" id="relayWhat" hidden>
+                  A relay is the small server that passes moves between the two players. This one
+                  runs on the free Cloudflare plan of whoever runs this site, and everyone using the
+                  site shares it, so it allows a set number of new games each day. Moves are
+                  end-to-end encrypted: the relay passes them along but cannot read them. A copy of
+                  your own comes with a relay of your own and no daily limit.
+                </p>
+                <p class="modal-note" id="ownerNote" hidden></p>
+                <p class="modal-note">
+                  <button type="button" class="link-btn" id="changeRelayBtn">Get your own copy</button>
+                  <span id="ownerLinkWrap">
+                    · <button type="button" class="link-btn" id="ownerLinkBtn">I'm the owner</button>
+                  </span>
+                </p>
+              </div>
             </div>
 
             <div id="hostOwnerOnly" hidden>
@@ -198,7 +213,7 @@
               </p>
               <div class="tool-buttons">
                 <button type="button" class="btn" id="imOwnerBtn">I'm the owner</button>
-                <button type="button" class="btn btn-primary" id="ownerOnlyCopyBtn">Your own copy</button>
+                <button type="button" class="btn btn-primary" id="ownerOnlyCopyBtn">Get your own copy</button>
               </div>
             </div>
 
@@ -209,12 +224,11 @@
                 none of this.
               </p>
               <div class="tool-buttons">
-                <button type="button" class="btn btn-primary" id="setupBtn">Your own copy</button>
+                <button type="button" class="btn btn-primary" id="setupBtn">Get your own copy</button>
                 <button type="button" class="btn" id="haveRelayBtn">I have a relay</button>
               </div>
             </div>
 
-            <p class="form-message bad" id="hostError" role="alert"></p>
           </div>
 
           <div class="modal-section">

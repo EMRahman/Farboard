@@ -28,7 +28,7 @@ every copy starts out private.
 
 **A copy of your own**: press the button. It copies the repository into your
 GitHub account, deploys it to your Cloudflare account, and asks for
-`OWNER_KEY`; Farboard's **Play online → Your own copy** generates one for
+`OWNER_KEY`; Farboard's **Play online → Get your own copy** generates one for
 you and walks you through the rest.
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/EMRahman/Farboard)

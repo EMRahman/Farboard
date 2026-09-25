@@ -509,7 +509,19 @@
     }
 
     var current = el.moveList.querySelector('.move.current');
-    if (current) current.scrollIntoView({ block: 'nearest' });
+    if (current) scrollListTo(current);
+  }
+
+  /*
+   * Bring a move into view by scrolling the move list only. scrollIntoView
+   * would also scroll the page, which on a phone yanks the board off screen
+   * after every move.
+   */
+  function scrollListTo(item) {
+    var list = el.moveList.getBoundingClientRect();
+    var box = item.getBoundingClientRect();
+    if (box.top < list.top) el.moveList.scrollTop -= list.top - box.top;
+    else if (box.bottom > list.bottom) el.moveList.scrollTop += box.bottom - list.bottom;
   }
 
   function moveButton(move, ply, playedCount) {
