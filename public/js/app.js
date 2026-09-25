@@ -81,6 +81,7 @@
     el.moveList = $('moveList');
     el.moveCount = $('moveCount');
     el.emptyMoves = $('emptyMoves');
+    el.emptyMovesLocal = el.emptyMoves.textContent;
     el.stripTop = $('strip-top');
     el.stripBottom = $('strip-bottom');
     el.overlay = $('boardOverlay');
@@ -489,6 +490,8 @@
     el.moveList.innerHTML = '';
     el.moveCount.textContent = all.length;
     el.emptyMoves.hidden = all.length > 0;
+    // Online there may be no physical board to copy the moves from.
+    el.emptyMoves.textContent = online ? 'No moves yet.' : el.emptyMovesLocal;
 
     for (var i = 0; i < all.length; i += 2) {
       var row = document.createElement('li');

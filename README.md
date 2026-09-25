@@ -1,6 +1,6 @@
 # Farboard
 
-Chess on a real board, with the person across the table or a friend far away.
+Play on your real board, or with a friend far away.
 
 **[Open Farboard](https://emrahman.github.io/Farboard/)**
 
