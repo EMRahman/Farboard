@@ -10,8 +10,9 @@
  * rate limit and the room's daily message allowance, so no connection can
  * spend the relay's daily requests faster than a game of chess would.
  *
- * Stored per room: the hashes of the two seat tokens, when it was made, and
- * today's message count. Nothing about the game itself; the devices hold that.
+ * Stored per room: the hashes of the two seat tokens, when it was made, which
+ * seats have left for good, and today's message count. Nothing about the
+ * game itself; the devices hold that.
  */
 import { DurableObject } from 'cloudflare:workers';
 import {
@@ -26,6 +27,7 @@ import {
   hostingLimits,
   isSealedFrame,
   isSeatToken,
+  leaveSeat,
   ownerKeyMatches,
   takeToken,
   utcDay
@@ -87,6 +89,7 @@ export class Room extends DurableObject {
       sendText(ws, 'pong');
       return;
     }
+    if (message.charAt(0) === '{') return this.leave(ws, state, message);
     if (!isSealedFrame(message)) return closeSocket(ws, CLOSE.badRequest, 'unexpected frame');
     const peer = this.seatSocket(1 - state.seat, ws);
     if (peer) peer.send(message);
@@ -118,7 +121,7 @@ export class Room extends DurableObject {
     const decision = await this.ctx.blockConcurrencyWhile(async () => {
       const meta = (await this.ctx.storage.get('meta')) || null;
       const canCreate = hello.create === true && (ownerOk || limits.public);
-      const choice = decideSeat(meta ? meta.seats : null, tokenHash, canCreate);
+      const choice = decideSeat(meta ? meta.seats : null, tokenHash, canCreate, meta ? meta.left || [] : []);
       if (choice.reject) return choice;
 
       if (!meta && limits.public) {
@@ -134,10 +137,12 @@ export class Room extends DurableObject {
       if (choice.isNew) {
         await this.ctx.storage.put('meta', {
           seats: meta ? meta.seats.concat(tokenHash) : [tokenHash],
-          created: meta ? meta.created : now
+          created: meta ? meta.created : now,
+          left: meta ? meta.left || [] : []
         });
       }
-      return choice;
+      // Tell a returning player if the other one left while they were away.
+      return { ...choice, peerLeft: !!meta && (meta.left || []).includes(1 - choice.seat) };
     });
     if (decision.reject) return closeSocket(ws, decision.reject, decision.reason);
 
@@ -152,7 +157,10 @@ export class Room extends DurableObject {
     ws.serializeAttachment(state);
 
     const peer = this.seatSocket(1 - decision.seat, ws);
-    sendText(ws, JSON.stringify({ t: 'joined', proto: PROTO, seat: decision.seat, peer: !!peer }));
+    sendText(
+      ws,
+      JSON.stringify({ t: 'joined', proto: PROTO, seat: decision.seat, peer: !!peer, peerLeft: decision.peerLeft })
+    );
     if (peer) sendText(peer, JSON.stringify({ t: 'peer', online: true }));
     await this.keepAlive(now);
   }
@@ -166,6 +174,39 @@ export class Room extends DurableObject {
     return counted.ok;
   }
 
+  /*
+   * { t: 'leave' }: this player is done with the game for good. Their seat is
+   * closed to them, the other player is told (now, or when they next
+   * connect), and once both have left the room is deleted.
+   */
+  async leave(ws, state, message) {
+    let note = null;
+    try {
+      note = JSON.parse(message);
+    } catch (err) {
+      /* handled below */
+    }
+    if (!note || note.t !== 'leave') return closeSocket(ws, CLOSE.badRequest, 'unexpected frame');
+
+    await this.ctx.blockConcurrencyWhile(async () => {
+      const meta = (await this.ctx.storage.get('meta')) || null;
+      if (!meta) return;
+      const { left, everyone } = leaveSeat(meta.left || [], state.seat);
+      if (everyone) {
+        await this.ctx.storage.deleteAlarm();
+        await this.ctx.storage.deleteAll();
+      } else {
+        await this.ctx.storage.put('meta', { ...meta, left });
+      }
+    });
+
+    const peer = this.seatSocket(1 - state.seat, ws);
+    if (peer) sendText(peer, JSON.stringify({ t: 'peer', online: false, left: true }));
+    state.left = true;
+    ws.serializeAttachment(state);
+    closeSocket(ws, 1000, 'left the game');
+  }
+
   async webSocketClose(ws) {
     this.left(ws);
   }
@@ -176,7 +217,7 @@ export class Room extends DurableObject {
 
   left(ws) {
     const seat = seatOf(ws);
-    if (seat === null) return;
+    if (seat === null || ws.deserializeAttachment().left) return; // already announced
     // If a newer connection already holds this seat, nobody has really left.
     if (this.seatSocket(seat, ws)) return;
     const peer = this.seatSocket(1 - seat, ws);

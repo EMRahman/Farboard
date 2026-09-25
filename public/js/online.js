@@ -218,9 +218,46 @@
     updateHeader();
   }
 
+  /*
+   * Leave the online game for good. The relay is told, so the opponent hears
+   * about it (now, or when they next connect) instead of waiting for someone
+   * who will never come back. Over the live connection if there is one,
+   * otherwise over a short one made just for this.
+   */
+  function leaveForGood() {
+    if (!session) return;
+    var old = session;
+    var told = !!client && client.leave();
+    forget();
+    if (!told) tellRelayWeLeft(old);
+  }
+
+  function tellRelayWeLeft(old) {
+    C.deriveRoom(old.secret)
+      .then(function (derived) {
+        var once = new RelayClient({
+          relay: old.relay,
+          roomId: derived.roomId,
+          seatToken: old.seatToken,
+          onStatus: function (status) {
+            if (status === 'connected') once.leave();
+            else if (status === 'reconnecting' || status === 'stopped') once.stop(); // best effort only
+          },
+          onPeer: function () {},
+          onFrame: function () {}
+        });
+        once.connect();
+      })
+      .catch(function () {
+        /* nothing more to do */
+      });
+  }
+
   function showState() {
     var s = session.state;
-    app.setOnline({ color: myColor(), outcome: s && s.outcome ? P.outcomeText(s.outcome) : null });
+    var outcome = s && s.outcome ? P.outcomeText(s.outcome) : null;
+    if (!outcome && session.peerLeft && !(s && P.gameOver(s))) outcome = 'Your opponent left the game';
+    app.setOnline({ color: myColor(), outcome: outcome });
     app.loadGame(s ? s.moves.map(P.decodeMove) : []);
     renderCard();
   }
@@ -248,8 +285,8 @@
           onStatus: function (status, detail) {
             if (gen === generation) onStatus(status, detail);
           },
-          onPeer: function (online) {
-            if (gen === generation) onPeer(online);
+          onPeer: function (online, left) {
+            if (gen === generation) onPeer(online, left);
           },
           onFrame: function (frame) {
             if (gen === generation) onFrame(frame);
@@ -283,6 +320,7 @@
     replaced: 'This game is open in another tab or window.',
     expired: 'This game expired after a week without moves.',
     'room-limit': 'This game has used its messages for today. It will work again after midnight UTC.',
+    left: 'You left this game on another tab or device.',
     'bad-request': 'The relay refused the connection. It may need updating.',
     crypto: 'This browser cannot play online (it needs a secure https:// page).'
   };
@@ -304,7 +342,16 @@
     renderCard();
   }
 
-  function onPeer(online) {
+  function onPeer(online, left) {
+    if (left && !session.peerLeft) {
+      session.peerLeft = true;
+      pending = null;
+      incoming = null;
+      persist();
+      showState();
+      app.flash('Your opponent left the game.');
+      nudge('Your opponent left');
+    }
     var arrived = online && !peerOnline;
     peerOnline = online;
     // Every time the other side (re)appears, compare notes; this is also how
@@ -456,6 +503,12 @@
   /* Ask the other side (take-back, draw or new game). */
   function request(kind) {
     if (!active || !session || !session.state) return;
+    if (session.peerLeft) {
+      // Nobody to ask. A new game means a new invite.
+      if (kind !== 'newgame') return app.flash('Your opponent has left this game.');
+      leaveForGood();
+      return openMenu();
+    }
     var s = session.state;
     if (!peerOnline) return app.flash('Your opponent is not connected right now.');
     if (pending) return app.flash('Still waiting for an answer to your last request.');
@@ -555,6 +608,9 @@
     if (linkStatus === 'stopped') {
       status = stopReason;
       tone = 'bad';
+    } else if (session.peerLeft) {
+      status = 'Your opponent left this game.';
+      tone = 'bad';
     } else if (linkStatus !== 'connected') {
       status = linkStatus === 'reconnecting' ? 'Reconnecting…' : 'Connecting to the relay…';
       tone = 'wait';
@@ -562,7 +618,7 @@
       var waitingForGuest = session.role === 'host' && s && s.rev === 0 && !s.moves.length;
       status = waitingForGuest
         ? 'Waiting for your opponent to open the invite.'
-        : 'Your opponent is offline. They can rejoin any time.';
+        : 'Your opponent is offline. The game carries on when they come back.';
       tone = 'wait';
     } else {
       status = 'Connected to your opponent.';
@@ -583,10 +639,11 @@
     }
     el.requestBanner.hidden = !incoming && !pending;
 
-    el.drawBtn.disabled = !color || over || !peerOnline || !!pending;
-    el.resignBtn.disabled = !color || over;
+    el.drawBtn.disabled = !color || over || !peerOnline || !!pending || !!session.peerLeft;
+    el.resignBtn.disabled = !color || over || !!session.peerLeft;
     el.reconnectBtn.hidden = linkStatus !== 'stopped';
-    el.inviteAgainBtn.hidden = session.role !== 'host';
+    el.inviteAgainBtn.hidden = session.role !== 'host' || !!session.peerLeft;
+    el.localBoardBtn.textContent = session.peerLeft ? 'Close game' : 'Local board';
   }
 
   function updateHeader() {
@@ -624,7 +681,10 @@
     if (session) {
       var color = myColor();
       var who = color ? ' (you play ' + COLOR_NAMES[color] + ')' : '';
-      if (active) {
+      if (session.peerLeft) {
+        el.currentText.textContent = 'Your opponent left your online game' + who + '.';
+        el.currentMainBtn.textContent = active ? 'Back to local board' : 'Look at it';
+      } else if (active) {
         el.currentText.textContent = 'You are in an online game' + who + '.';
         el.currentMainBtn.textContent = 'Back to local board';
       } else {
@@ -732,7 +792,7 @@
     var hosting = hostingRelay();
     if (!hosting) return openMenu();
     if (session && !window.confirm('Start a new online game? You will leave the one you have now.')) return;
-    if (active) leave();
+    leaveForGood();
     session = {
       v: 1,
       relay: hosting.url,
@@ -778,7 +838,7 @@
     var link = pendingJoin;
     pendingJoin = null;
     if (!link) return;
-    if (active) leave();
+    leaveForGood();
     session = {
       v: 1,
       relay: link.relay,
@@ -1116,7 +1176,7 @@
     });
     on(el.currentLeaveBtn, function () {
       if (!window.confirm('Leave this online game for good? You will not be able to rejoin it.')) return;
-      forget();
+      leaveForGood();
       openMenu();
     });
     on(el.setupBtn, openCopy);
@@ -1195,7 +1255,10 @@
     on(el.resignBtn, resign);
     on(el.reconnectBtn, connect);
     on(el.inviteAgainBtn, showInvite);
-    on(el.localBoardBtn, leave);
+    on(el.localBoardBtn, function () {
+      if (session && session.peerLeft) leaveForGood();
+      else leave();
+    });
 
     window.addEventListener('hashchange', readAddressBar);
     document.addEventListener('visibilitychange', function () {

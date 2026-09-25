@@ -30,6 +30,7 @@
     4403: 'full',
     4409: 'replaced',
     4410: 'expired',
+    4411: 'left',
     4430: 'network-limit',
     4503: 'daily-limit',
     4508: 'room-limit'
@@ -38,7 +39,8 @@
   /*
    * options: relay (origin), roomId, seatToken, create (host only: may open
    *          the room), ownerKey (host on their own relay),
-   *          onStatus(status, detail), onPeer(online), onFrame(frame)
+   *          onStatus(status, detail), onPeer(online, left), onFrame(frame)
+   *          (left: the other player has left the game for good)
    * status:  'connecting' | 'connected' | 'reconnecting' | 'stopped'
    */
   function RelayClient(options) {
@@ -104,9 +106,9 @@
         self.attempt = 0;
         self.startPing();
         self.status('connected');
-        self.options.onPeer(!!note.peer);
+        self.options.onPeer(!!note.peer, !!note.peerLeft);
       } else if (note.t === 'peer') {
-        self.options.onPeer(!!note.online);
+        self.options.onPeer(!!note.online, !!note.left);
       }
     };
 
@@ -191,6 +193,15 @@
   RelayClient.prototype.send = function (frame) {
     if (!this.joined || !this.socket || this.socket.readyState !== 1) return false;
     this.socket.send(frame);
+    return true;
+  };
+
+  /* Tell the relay this player is leaving the game for good, then hang up. */
+  RelayClient.prototype.leave = function () {
+    if (!this.joined || !this.socket) return false;
+    // Queued data goes out before the close handshake, so this arrives first.
+    this.socket.send(JSON.stringify({ t: 'leave' }));
+    this.stop();
     return true;
   };
 

@@ -35,6 +35,7 @@ export const CLOSE = {
   roomFull: 4403,
   replaced: 4409,
   expired: 4410,
+  left: 4411,
   tooFast: 4429,
   networkLimit: 4430,
   roomLimit: 4508,
@@ -98,18 +99,29 @@ export function ownerKeyMatches(offered, configured) {
  *
  *   - Only someone allowed to create games can bring a room into existence:
  *     the relay's owner, or anyone when public hosting is on.
- *   - A known token gets its old seat back (a reconnect or a reload).
+ *   - A known token gets its old seat back (a reconnect or a reload),
+ *     unless that player has left the game for good.
  *   - A new token gets the next free seat; there are two.
  */
-export function decideSeat(seats, tokenHash, canCreate) {
+export function decideSeat(seats, tokenHash, canCreate, left = []) {
   if (seats === null) {
     if (!canCreate) return { reject: CLOSE.ownerKeyRequired, reason: 'no such game' };
     return { seat: 0, isNew: true };
   }
   const known = seats.indexOf(tokenHash);
+  if (known !== -1 && left.includes(known)) return { reject: CLOSE.left, reason: 'you left this game' };
   if (known !== -1) return { seat: known, isNew: false };
   if (seats.length < 2) return { seat: seats.length, isNew: true };
   return { reject: CLOSE.roomFull, reason: 'game is full' };
+}
+
+/*
+ * Record that a seat has left the game for good. Returns the new list of
+ * seats that have left, and whether that is now everyone.
+ */
+export function leaveSeat(left, seat) {
+  const next = left.includes(seat) ? left.slice() : left.concat(seat).sort();
+  return { left: next, everyone: next.length >= 2 };
 }
 
 export function freshBucket(now) {

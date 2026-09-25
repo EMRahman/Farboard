@@ -937,6 +937,10 @@ body.hide-coords .coord {
   border-top: 1px solid var(--border);
 }
 
+.stats-line {
+  display: block;
+}
+
 .relay-what {
   padding: 8px 10px;
   border-radius: 6px;
