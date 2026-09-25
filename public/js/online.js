@@ -321,6 +321,7 @@
     expired: 'This game expired after a week without moves.',
     'room-limit': 'This game has used its messages for today. It will work again after midnight UTC.',
     left: 'You left this game on another tab or device.',
+    ended: 'This game has ended: both players have left it.',
     'bad-request': 'The relay refused the connection. It may need updating.',
     crypto: 'This browser cannot play online (it needs a secure https:// page).'
   };

@@ -31,6 +31,7 @@
     4409: 'replaced',
     4410: 'expired',
     4411: 'left',
+    4412: 'ended',
     4430: 'network-limit',
     4503: 'daily-limit',
     4508: 'room-limit'

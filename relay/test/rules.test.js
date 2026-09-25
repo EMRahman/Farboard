@@ -111,6 +111,11 @@ test('a player who left cannot take their seat back', () => {
   assert.deepStrictEqual(decideSeat(['h1', 'h2'], 'h1', false, [1]), { seat: 0, isNew: false });
 });
 
+test('a game both players have left stays closed to everyone', () => {
+  assert.strictEqual(decideSeat(['h1', 'h2'], 'h1', true, [0, 1]).reject, CLOSE.ended);
+  assert.strictEqual(decideSeat(['h1', 'h2'], 'h3', true, [0, 1]).reject, CLOSE.ended);
+});
+
 test('leaving is recorded once, and the room is done when both have left', () => {
   assert.deepStrictEqual(leaveSeat([], 1), { left: [1], everyone: false });
   assert.deepStrictEqual(leaveSeat([1], 1), { left: [1], everyone: false });

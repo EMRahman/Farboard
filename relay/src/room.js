@@ -78,6 +78,10 @@ export class Room extends DurableObject {
     if (state.seat === null) return this.join(ws, state, message, now);
     ws.serializeAttachment(state);
 
+    // Leaving must always be recorded, even in a room past its daily cap:
+    // the leaver forgets the game straight after sending it.
+    if (message.charAt(0) === '{') return this.leave(ws, state, message, now);
+
     if (!(await this.countMessage(now))) {
       for (const socket of this.ctx.getWebSockets()) {
         closeSocket(socket, CLOSE.roomLimit, 'daily message allowance used');
@@ -89,7 +93,6 @@ export class Room extends DurableObject {
       sendText(ws, 'pong');
       return;
     }
-    if (message.charAt(0) === '{') return this.leave(ws, state, message);
     if (!isSealedFrame(message)) return closeSocket(ws, CLOSE.badRequest, 'unexpected frame');
     const peer = this.seatSocket(1 - state.seat, ws);
     if (peer) peer.send(message);
@@ -177,9 +180,10 @@ export class Room extends DurableObject {
   /*
    * { t: 'leave' }: this player is done with the game for good. Their seat is
    * closed to them, the other player is told (now, or when they next
-   * connect), and once both have left the room is deleted.
+   * connect), and once both have left the game is closed to everyone until
+   * the room's usual clean-up a week later.
    */
-  async leave(ws, state, message) {
+  async leave(ws, state, message, now) {
     let note = null;
     try {
       note = JSON.parse(message);
@@ -192,12 +196,10 @@ export class Room extends DurableObject {
       const meta = (await this.ctx.storage.get('meta')) || null;
       if (!meta) return;
       const { left, everyone } = leaveSeat(meta.left || [], state.seat);
-      if (everyone) {
-        await this.ctx.storage.deleteAlarm();
-        await this.ctx.storage.deleteAll();
-      } else {
-        await this.ctx.storage.put('meta', { ...meta, left });
-      }
+      await this.ctx.storage.put('meta', { ...meta, left });
+      // A finished game keeps this small record until the usual clean-up, so a
+      // stale tab cannot bring the room back to life by creating it afresh.
+      if (everyone) await this.ctx.storage.setAlarm(now + ROOM_IDLE_MS);
     });
 
     const peer = this.seatSocket(1 - state.seat, ws);

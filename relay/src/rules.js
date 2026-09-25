@@ -36,6 +36,7 @@ export const CLOSE = {
   replaced: 4409,
   expired: 4410,
   left: 4411,
+  ended: 4412,
   tooFast: 4429,
   networkLimit: 4430,
   roomLimit: 4508,
@@ -99,6 +100,7 @@ export function ownerKeyMatches(offered, configured) {
  *
  *   - Only someone allowed to create games can bring a room into existence:
  *     the relay's owner, or anyone when public hosting is on.
+ *   - Once both players have left, the game is over for everyone.
  *   - A known token gets its old seat back (a reconnect or a reload),
  *     unless that player has left the game for good.
  *   - A new token gets the next free seat; there are two.
@@ -108,6 +110,7 @@ export function decideSeat(seats, tokenHash, canCreate, left = []) {
     if (!canCreate) return { reject: CLOSE.ownerKeyRequired, reason: 'no such game' };
     return { seat: 0, isNew: true };
   }
+  if (left.length >= 2) return { reject: CLOSE.ended, reason: 'game has ended' };
   const known = seats.indexOf(tokenHash);
   if (known !== -1 && left.includes(known)) return { reject: CLOSE.left, reason: 'you left this game' };
   if (known !== -1) return { seat: known, isNew: false };
