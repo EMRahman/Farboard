@@ -921,6 +921,28 @@ body.hide-coords .coord {
   accent-color: var(--accent);
 }
 
+#hostReady {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.host-notes {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.relay-what {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--panel-raised);
+}
+
 .link-btn {
   appearance: none;
   background: none;
@@ -1004,6 +1026,31 @@ body.hide-coords .coord {
 
   .tagline {
     display: none;
+  }
+}
+
+/* On phones, 100vh includes the space behind the browser's toolbars, so a
+   board sized from it can run off the bottom of the screen. svh is the height
+   that is actually visible; browsers without it keep the vh sizes above. */
+@supports (height: 100svh) {
+  :root {
+    --board-size: min(92vw, calc(100svh - 320px), 560px);
+  }
+
+  .modal-card {
+    max-height: calc(100svh - 32px);
+  }
+
+  @media (max-width: 860px) {
+    :root {
+      --board-size: min(94vw, calc(100svh - 260px), 520px);
+    }
+  }
+
+  @media (max-width: 420px) {
+    :root {
+      --board-size: min(96vw, calc(100svh - 250px));
+    }
   }
 }
 

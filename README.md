@@ -56,9 +56,9 @@ anything unless you choose **Play online**.
   menu shows how many are left.
 - **Joining** needs nothing: scan the host's QR code with your phone camera or
   open their link, confirm, and play. No account, no install.
-- **Your own copy** (optional): the whole app, page and relay, on your own free
+- **Get your own copy** (optional): the whole app, page and relay, on your own free
   Cloudflare account at your own address, with no daily limit for you. Under
-  **Play online → Your own copy**, copy the owner key the app generates, press
+  **Play online → Get your own copy**, copy the owner key the app generates, press
   **Deploy to Cloudflare** (you will need free Cloudflare and GitHub accounts),
   paste the key when asked for `OWNER_KEY`, then paste your copy's address and
   choose **Open**; your key goes with you.
@@ -130,7 +130,7 @@ The app is published in two places:
 
 The button copies this repository into your GitHub account and deploys it to
 your Cloudflare account. Your copy is private until you choose otherwise; the
-app walks you through it under **Play online → Your own copy**.
+app walks you through it under **Play online → Get your own copy**.
 
 ## Keyboard shortcuts
 

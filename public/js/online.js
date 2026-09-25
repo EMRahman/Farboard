@@ -42,7 +42,7 @@
 
   var TITLES = {
     menu: 'Play online',
-    copy: 'Your own copy',
+    copy: 'Get your own copy',
     owner: 'Owner key',
     invite: 'Invite your opponent',
     join: 'Join a game'
@@ -648,24 +648,30 @@
     el.hostReady.hidden = !hosting;
     el.hostOwnerOnly.hidden = !!hosting || !house;
     el.hostSetupNeeded.hidden = !!hosting || !!house;
-    el.hostStats.hidden = true;
+    el.hostStats.textContent = '';
     el.createInviteBtn.disabled = false;
     el.ownerLinkWrap.hidden = !!own;
+    el.sharedNote.hidden = !!own;
+    el.ownerNote.hidden = !own;
+    showRelayWhat(false);
     if (!hosting) return;
 
     if (own) {
-      el.relayLine.textContent =
+      el.ownerNote.textContent =
         house && own.url === house.url
-          ? 'You host as ' + (ours ? 'this site' : 'the relay') + '’s owner, with no daily limit'
-          : 'Your relay: ' + P.relayLabel(own.url);
+          ? 'You host as ' + (ours ? 'this site' : 'the relay') + '’s owner, with no daily limit.'
+          : 'Games go through your relay at ' + P.relayLabel(own.url) + '.';
       el.changeRelayBtn.textContent = 'Owner key';
     } else {
-      el.relayLine.textContent = ours
-        ? 'Games are hosted on this site’s relay'
-        : 'Games are hosted on the shared relay';
-      el.changeRelayBtn.textContent = 'Your own copy';
+      el.changeRelayBtn.textContent = 'Get your own copy';
       loadStats(house.url);
     }
+  }
+
+  /* "shared relay" opens a short explanation in place; tooltips do not work on phones. */
+  function showRelayWhat(open) {
+    el.relayWhat.hidden = !open;
+    el.relayWhatBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
   }
 
   /* How many new games the house relay has left today. */
@@ -677,15 +683,15 @@
       .then(function (stats) {
         sharedStats = stats;
         if (currentPanel !== 'menu') return;
-        el.hostStats.hidden = false;
         if (!stats.publicHosting) {
-          el.hostStats.textContent = 'The relay is not taking new games at the moment.';
+          el.hostStats.textContent = 'It is not taking new games at the moment.';
           el.createInviteBtn.disabled = true;
         } else if (stats.remaining <= 0) {
           el.hostStats.textContent = dailyLimitText(stats);
           el.createInviteBtn.disabled = true;
         } else {
-          el.hostStats.textContent = stats.remaining + ' of ' + stats.dailyLimit + ' new games left today.';
+          el.hostStats.textContent =
+            stats.remaining + ' out of ' + stats.dailyLimit + ' games left for anyone to use today.';
         }
       })
       .catch(function () {
@@ -695,12 +701,11 @@
 
   function dailyLimitText(stats) {
     stats = stats || sharedStats;
-    var limit = stats && stats.dailyLimit ? stats.dailyLimit + ' ' : '';
+    var all = stats && stats.dailyLimit ? 'All ' + stats.dailyLimit + ' of today’s games' : 'Today’s games';
     var wait = stats && stats.resetsAt ? ' (' + untilText(Date.parse(stats.resetsAt)) + ')' : '';
     return (
-      'The relay has started its ' +
-      limit +
-      'games for today. New games open again at midnight UTC' +
+      all +
+      ' have been used. New games open again at midnight UTC' +
       wait +
       '; games already under way carry on.'
     );
@@ -804,7 +809,7 @@
 
   /* ---------------------------------------------------------------- setup */
 
-  /* Your own copy: a key to deploy with, the button, then off to the copy. */
+  /* Get your own copy: a key to deploy with, the button, then off to the copy. */
   function openCopy() {
     var key = readJson(DRAFT_KEY);
     if (!P.isOwnerKey(key)) {
@@ -1037,7 +1042,10 @@
       'ownerOnlyCopyBtn',
       'haveRelayBtn',
       'hostSetupNeeded',
-      'relayLine',
+      'sharedNote',
+      'relayWhatBtn',
+      'relayWhat',
+      'ownerNote',
       'hostStats',
       'hostError',
       'changeRelayBtn',
@@ -1119,6 +1127,9 @@
     on(el.imOwnerBtn, function () {
       openOwner(house ? { relay: house.url } : null);
     });
+    on(el.relayWhatBtn, function () {
+      showRelayWhat(el.relayWhat.hidden);
+    });
     on(el.ownerLinkBtn, function () {
       openOwner(house ? { relay: house.url } : null);
     });
@@ -1132,7 +1143,7 @@
       if (event.key === 'Enter') joinFromPaste();
     });
 
-    // Your own copy
+    // Get your own copy
     on(el.copyKeyBtn, function () {
       app.copyText(el.draftKeyInput.value, 'Owner key');
     });
