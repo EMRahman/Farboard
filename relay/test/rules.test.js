@@ -14,6 +14,7 @@ import {
   isRoomId,
   isSealedFrame,
   isSeatToken,
+  leaveSeat,
   nextUtcMidnight,
   originAllowed,
   ownerKeyMatches,
@@ -103,6 +104,22 @@ test('known players get their own seats back', () => {
 test('a third player is turned away, even with the owner key', () => {
   assert.strictEqual(decideSeat(['h1', 'h2'], 'h3', false).reject, CLOSE.roomFull);
   assert.strictEqual(decideSeat(['h1', 'h2'], 'h3', true).reject, CLOSE.roomFull);
+});
+
+test('a player who left cannot take their seat back', () => {
+  assert.strictEqual(decideSeat(['h1', 'h2'], 'h2', false, [1]).reject, CLOSE.left);
+  assert.deepStrictEqual(decideSeat(['h1', 'h2'], 'h1', false, [1]), { seat: 0, isNew: false });
+});
+
+test('a game both players have left stays closed to everyone', () => {
+  assert.strictEqual(decideSeat(['h1', 'h2'], 'h1', true, [0, 1]).reject, CLOSE.ended);
+  assert.strictEqual(decideSeat(['h1', 'h2'], 'h3', true, [0, 1]).reject, CLOSE.ended);
+});
+
+test('leaving is recorded once, and the room is done when both have left', () => {
+  assert.deepStrictEqual(leaveSeat([], 1), { left: [1], everyone: false });
+  assert.deepStrictEqual(leaveSeat([1], 1), { left: [1], everyone: false });
+  assert.deepStrictEqual(leaveSeat([1], 0), { left: [0, 1], everyone: true });
 });
 
 test('the rate limit allows a burst, then refills over time', () => {
