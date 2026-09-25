@@ -23,6 +23,18 @@
   // The Workers Free plan only offers SQLite-backed Durable Objects.
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room", "Budget"] }],
 
+  // Pull-request previews (Workers Builds runs `wrangler preview` for them).
+  // Each preview gets its own, empty game rooms and budget, apart from the
+  // live ones; the bindings have to be repeated here to exist there at all.
+  "previews": {
+    "durable_objects": {
+      "bindings": [
+        { "name": "ROOM", "class_name": "Room" },
+        { "name": "BUDGET", "class_name": "Budget" }
+      ]
+    }
+  },
+
   // Settings live in the Cloudflare dashboard (Settings → Variables and
   // Secrets), not here, so every copy starts private and redeploys keep them:
   //   OWNER_KEY, PUBLIC_HOSTING, DAILY_GAME_LIMIT, HOURLY_GAMES_PER_NETWORK,
