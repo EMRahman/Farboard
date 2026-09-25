@@ -2,7 +2,8 @@
 
 Play on your real board, or with a friend far away.
 
-**[Open Farboard](https://emrahman.github.io/Farboard/)**
+**[Open Farboard](https://farboard.ehsanr-web.workers.dev/)**
+(also at [emrahman.github.io/Farboard](https://emrahman.github.io/Farboard/))
 
 Playing over the board means holding the whole position in your head: which
 piece is where, what each one can reach, what you have already given up.
@@ -109,22 +110,19 @@ version, run `npx wrangler dev --var PUBLIC_HOSTING:true --var DAILY_GAME_LIMIT:
 
 The app is published in two places:
 
-- **Cloudflare** (the whole app, with online play): one Worker serves the files
-  in `public/` and runs the relay. Page files are served free and without
-  limit; only online games use the free plan's allowance. The Worker is
-  connected to this repository in the Cloudflare dashboard (**Workers & Pages
-  → Create → Import a repository**, build command empty, deploy command
-  `npx wrangler deploy`), so every push to `main` redeploys it. Its settings,
-  `OWNER_KEY` and `PUBLIC_HOSTING`, are described in
+- **[Cloudflare](https://farboard.ehsanr-web.workers.dev/)** (the whole app,
+  with online play): one Worker serves the files in `public/` and runs the
+  relay. Page files are served free and without limit; only online games use
+  the free plan's allowance. The Worker is connected to this repository in the
+  Cloudflare dashboard (the Worker → **Settings → Builds**, deploy command
+  `npx wrangler deploy`), so every push to `main` redeploys it. Its settings
+  (`OWNER_KEY`, `PUBLIC_HOSTING`, `ALLOWED_ORIGINS`) are described in
   [`relay/README.md`](relay/README.md).
 - **[GitHub Pages](https://emrahman.github.io/Farboard/)** (a second copy of
   the page): published by the workflow in `.github/workflows` whenever a change
-  reaches `main`, after the tests pass. It has no relay of its own; set
-  `sharedRelay` in `public/js/config.js` to the Cloudflare address, and add
-  `https://emrahman.github.io` to the Worker's `ALLOWED_ORIGINS`, so online
-  play from this copy goes through the Cloudflare relay. For the workflow to
-  publish, **Settings → Pages → Build and deployment → Source** must be set to
-  **GitHub Actions**.
+  reaches `main`, after the tests pass. It has no relay of its own, so
+  `sharedRelay` in `public/js/config.js` points it at the Cloudflare relay,
+  whose `ALLOWED_ORIGINS` includes `https://emrahman.github.io`.
 
 ### Your own copy
 

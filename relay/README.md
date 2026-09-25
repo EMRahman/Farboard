@@ -43,6 +43,11 @@ deploy command `npx wrangler deploy`), so every push to `main` redeploys it.
 **From the command line**: `npx wrangler deploy`, then
 `npx wrangler secret put OWNER_KEY`.
 
+If the site does not load at `<name>.<subdomain>.workers.dev`, check the
+Worker → **Settings → Domains & Routes**: the `workers.dev` address should be
+enabled. The config asks for it at every deploy, but some ways of creating a
+Worker start with it switched off.
+
 ## Public hosting
 
 1. Set `PUBLIC_HOSTING` to `true`, and `DAILY_GAME_LIMIT` if you want something
