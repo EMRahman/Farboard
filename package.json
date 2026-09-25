@@ -1,0 +1,17 @@
+{
+  "name": "farboard",
+  "version": "1.0.0",
+  "description": "A companion board for chess played with real pieces, with online play through a relay on Cloudflare's free plan.",
+  "private": true,
+  "scripts": {
+    "test": "node test/engine.test.js && node test/protocol.test.js && node test/netcrypto.test.js && node relay/test/rules.test.js",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "start": "python3 -m http.server 8000 --directory public"
+  },
+  "keywords": ["chess", "board", "over-the-board", "notation", "scoresheet"],
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^4.140.0"
+  }
+}

@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#262421" />
+    <!--
+      Online games connect to whichever relay the host chose, so any secure
+      WebSocket is allowed (plus a relay on this machine for development).
+      Moves are end-to-end encrypted; the relay cannot read them.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https: wss: http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:*; base-uri 'none'; form-action 'none'; object-src 'none'"
+    />
+    <meta
+      name="description"
+      content="Follow a chess game on a real board: tap a piece to see every legal move, record the game and keep score of material. Or send a link and play a friend anywhere, end-to-end encrypted."
+    />
+    <title>Farboard — your chessboard, near and far</title>
+    <link rel="stylesheet" href="css/styles.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♞</text></svg>"
+    />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">♞</span>
+        <div>
+          <h1>Farboard</h1>
+          <p class="tagline">Play on your real board — tap here to see the moves.</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button type="button" id="onlineBtn" class="btn">Play online</button>
+        <button type="button" id="flipBtn" class="btn" title="Flip the board (F)">
+          <span aria-hidden="true">⇅</span> Flip
+        </button>
+        <button type="button" id="newGameBtn" class="btn">New game</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="board-panel" aria-label="Chess board">
+        <div class="player-strip" id="strip-top">
+          <div class="player-id">
+            <span class="dot" aria-hidden="true"></span>
+            <span class="player-name"></span>
+          </div>
+          <div class="captured" aria-label="Pieces captured"></div>
+          <div class="lead" aria-live="polite"></div>
+        </div>
+
+        <div class="board-wrap">
+          <div
+            class="board"
+            id="board"
+            role="grid"
+            aria-label="Chess board, tap a piece to see its legal moves"
+          ></div>
+          <div class="board-overlay" id="boardOverlay" hidden>
+            <div class="overlay-card">
+              <p class="overlay-text" id="overlayText"></p>
+              <button type="button" class="btn btn-primary" id="overlayNewGame">New game</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="player-strip" id="strip-bottom">
+          <div class="player-id">
+            <span class="dot" aria-hidden="true"></span>
+            <span class="player-name"></span>
+          </div>
+          <div class="captured" aria-label="Pieces captured"></div>
+          <div class="lead" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <aside class="side-panel">
+        <div class="online-card" id="onlineCard" hidden>
+          <div class="online-head">
+            <span class="net-dot" id="netDot" aria-hidden="true"></span>
+            <p class="net-status" id="netStatus" role="status">Connecting…</p>
+          </div>
+          <p class="online-detail" id="netDetail"></p>
+          <div class="request-banner" id="requestBanner" hidden>
+            <p id="requestText"></p>
+            <div class="tool-buttons" id="requestButtons">
+              <button type="button" class="btn small btn-primary" id="requestAccept">Accept</button>
+              <button type="button" class="btn small" id="requestDecline">Decline</button>
+            </div>
+          </div>
+          <div class="tool-buttons">
+            <button type="button" class="btn small" id="drawBtn">Offer draw</button>
+            <button type="button" class="btn small" id="resignBtn">Resign</button>
+          </div>
+          <div class="tool-buttons">
+            <button type="button" class="btn small" id="reconnectBtn" hidden>Reconnect</button>
+            <button type="button" class="btn small" id="inviteAgainBtn" hidden>Invite link</button>
+            <button type="button" class="btn small" id="localBoardBtn">Local board</button>
+          </div>
+        </div>
+
+        <div class="status-card">
+          <p class="status-line" id="status" role="status">White to move</p>
+          <p class="hint" id="hint">Tap any piece to light up every square it can move to.</p>
+        </div>
+
+        <div class="moves-card">
+          <div class="moves-head">
+            <h2>Moves</h2>
+            <span class="move-count" id="moveCount">0</span>
+          </div>
+          <ol class="move-list" id="moveList" aria-label="Move list"></ol>
+          <p class="empty-moves" id="emptyMoves">No moves yet. Make the first move on your board, then tap it here.</p>
+        </div>
+
+        <div class="nav-card" role="group" aria-label="Move navigation">
+          <button type="button" class="btn nav" id="firstBtn" title="Jump to the start">⏮</button>
+          <button type="button" class="btn nav" id="backBtn" title="Step back (←)">◀</button>
+          <button type="button" class="btn nav" id="forwardBtn" title="Step forward (→)">▶</button>
+          <button type="button" class="btn nav" id="lastBtn" title="Jump to the latest move">⏭</button>
+          <button type="button" class="btn nav wide" id="undoBtn" title="Delete the last move (Ctrl+Z)">
+            Take back
+          </button>
+        </div>
+
+        <div class="tools-card">
+          <label class="toggle">
+            <input type="checkbox" id="autoFlip" />
+            <span>Auto-flip to the side to move</span>
+          </label>
+          <label class="toggle">
+            <input type="checkbox" id="showCoords" checked />
+            <span>Show coordinates</span>
+          </label>
+          <div class="tool-buttons">
+            <button type="button" class="btn small" id="copyPgnBtn">Copy PGN</button>
+            <button type="button" class="btn small" id="copyFenBtn">Copy FEN</button>
+          </div>
+          <p class="tool-feedback" id="toolFeedback" role="status"></p>
+        </div>
+      </aside>
+    </main>
+
+    <div class="promotion-backdrop" id="promotionBackdrop" hidden>
+      <div class="promotion-card" role="dialog" aria-modal="true" aria-labelledby="promotionTitle">
+        <p id="promotionTitle">Promote to</p>
+        <div class="promotion-choices" id="promotionChoices"></div>
+        <button type="button" class="btn small" id="promotionCancel">Cancel</button>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="onlineModal" hidden>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="onlineTitle">
+        <div class="modal-head">
+          <h2 id="onlineTitle">Play online</h2>
+          <button type="button" class="btn small" id="onlineClose" aria-label="Close">✕</button>
+        </div>
+
+        <section class="modal-panel" data-panel="menu">
+          <div class="modal-section" id="currentSection" hidden>
+            <p id="currentText"></p>
+            <div class="tool-buttons">
+              <button type="button" class="btn btn-primary" id="currentMainBtn">Resume it</button>
+              <button type="button" class="btn" id="currentLeaveBtn">Leave game</button>
+            </div>
+          </div>
+
+          <div class="modal-section">
+            <h3>Host a game</h3>
+            <p class="modal-note" id="hostChecking">Checking where games can be hosted…</p>
+
+            <div id="hostReady" hidden>
+              <p class="modal-note">
+                <span id="relayLine"></span> ·
+                <button type="button" class="link-btn" id="changeRelayBtn">Your own copy</button>
+                <span id="ownerLinkWrap">
+                  · <button type="button" class="link-btn" id="ownerLinkBtn">I'm the owner</button>
+                </span>
+              </p>
+              <p class="modal-note" id="hostStats" hidden></p>
+              <fieldset class="color-choice">
+                <legend>You play</legend>
+                <label><input type="radio" name="hostColor" value="w" checked /> White</label>
+                <label><input type="radio" name="hostColor" value="b" /> Black</label>
+                <label><input type="radio" name="hostColor" value="random" /> Random</label>
+              </fieldset>
+              <button type="button" class="btn btn-primary" id="createInviteBtn">Create invite</button>
+            </div>
+
+            <div id="hostOwnerOnly" hidden>
+              <p class="modal-note">
+                Only this site's owner can start games here. You can still join games you are
+                invited to, or run a copy of your own.
+              </p>
+              <div class="tool-buttons">
+                <button type="button" class="btn" id="imOwnerBtn">I'm the owner</button>
+                <button type="button" class="btn btn-primary" id="ownerOnlyCopyBtn">Your own copy</button>
+              </div>
+            </div>
+
+            <div id="hostSetupNeeded" hidden>
+              <p class="modal-note">
+                Hosting needs a relay. You can run your own copy of Farboard, free on
+                Cloudflare, set up once in about five minutes. Joining someone else's game needs
+                none of this.
+              </p>
+              <div class="tool-buttons">
+                <button type="button" class="btn btn-primary" id="setupBtn">Your own copy</button>
+                <button type="button" class="btn" id="haveRelayBtn">I have a relay</button>
+              </div>
+            </div>
+
+            <p class="form-message bad" id="hostError" role="alert"></p>
+          </div>
+
+          <div class="modal-section">
+            <h3>Join a game</h3>
+            <p class="modal-note">
+              Scan the QR code your opponent shows you with your camera, or open their invite link.
+              You can also paste the link here.
+            </p>
+            <div class="inline-form">
+              <input type="url" id="joinInput" placeholder="Paste an invite link" autocomplete="off" spellcheck="false" />
+              <button type="button" class="btn" id="joinPasteBtn">Join</button>
+            </div>
+            <p class="form-message bad" id="joinError" role="alert"></p>
+          </div>
+        </section>
+
+        <section class="modal-panel" data-panel="copy" hidden>
+          <p class="modal-note">
+            Your own copy is the whole of Farboard, this page and a relay, on your own free
+            Cloudflare account at an address of your own. People you invite need nothing. You do
+            this once.
+          </p>
+          <ol class="setup-steps">
+            <li>
+              <h3>Copy an owner key</h3>
+              <p class="modal-note">
+                It lets you start games on your copy. Keep it private; the people you invite never
+                need it.
+              </p>
+              <div class="inline-form">
+                <input type="text" id="draftKeyInput" readonly spellcheck="false" aria-label="Owner key" />
+                <button type="button" class="btn" id="copyKeyBtn">Copy</button>
+              </div>
+            </li>
+            <li>
+              <h3>Deploy to Cloudflare</h3>
+              <p class="modal-note">
+                Sign in to Cloudflare and GitHub, or create free accounts, when asked. When
+                Cloudflare asks for <code>OWNER_KEY</code>, paste the key from step 1.
+              </p>
+              <a class="btn" id="deployLink" href="#" target="_blank" rel="noopener noreferrer">Deploy to Cloudflare ↗</a>
+            </li>
+            <li>
+              <h3>Open your copy</h3>
+              <p class="modal-note">
+                Paste the address Cloudflare gives you, for example
+                <code>farboard.yourname.workers.dev</code>. Your key goes with you.
+              </p>
+              <div class="inline-form">
+                <input type="url" id="copyAddressInput" placeholder="farboard.yourname.workers.dev" autocomplete="off" spellcheck="false" aria-label="Your copy's address" />
+                <button type="button" class="btn btn-primary" id="openCopyBtn">Open</button>
+              </div>
+              <p class="form-message" id="copyResult" role="status"></p>
+            </li>
+          </ol>
+          <div class="tool-buttons">
+            <button type="button" class="btn" id="copyBackBtn">Back</button>
+          </div>
+        </section>
+
+        <section class="modal-panel" data-panel="owner" hidden>
+          <p class="modal-note">
+            The owner key lets you start games on a relay you run: always on a private relay, and
+            past the daily limit on a public one.
+          </p>
+          <div class="modal-section">
+            <h3>Relay address</h3>
+            <input class="field" type="url" id="relayInput" placeholder="farboard.yourname.workers.dev" autocomplete="off" spellcheck="false" aria-label="Relay address" />
+            <h3>Owner key</h3>
+            <div class="inline-form">
+              <input type="text" id="ownerKeyInput" autocomplete="off" spellcheck="false" aria-label="Owner key" />
+              <button type="button" class="btn btn-primary" id="checkRelayBtn">Check &amp; save</button>
+            </div>
+            <p class="form-message" id="relayResult" role="status"></p>
+          </div>
+
+          <div class="modal-section" id="otherDeviceSection" hidden>
+            <h3>Host from another device too</h3>
+            <p class="modal-note warn">
+              Scan this with your other phone or computer to copy these settings over. It contains
+              your owner key, so do not show it to anyone else.
+            </p>
+            <div class="qr" id="setupQr"></div>
+          </div>
+
+          <div class="tool-buttons">
+            <button type="button" class="btn" id="setupBackBtn">Back</button>
+            <button type="button" class="btn" id="otherDeviceBtn">Use on another device</button>
+            <button type="button" class="btn" id="forgetRelayBtn">Forget key</button>
+          </div>
+        </section>
+
+        <section class="modal-panel" data-panel="invite" hidden>
+          <p class="modal-note">
+            Your opponent scans this with their phone's camera, or opens the link in any browser.
+            They do not need an account.
+          </p>
+          <div class="qr" id="inviteQr"></div>
+          <div class="inline-form">
+            <input type="text" id="inviteLink" readonly aria-label="Invite link" />
+            <button type="button" class="btn" id="copyInviteBtn">Copy</button>
+          </div>
+          <p class="modal-note" id="inviteStatus" role="status"></p>
+          <p class="modal-note warn">
+            Whoever opens this link first takes the empty seat, so send it only to your opponent.
+          </p>
+          <div class="tool-buttons">
+            <button type="button" class="btn" id="shareInviteBtn" hidden>Share…</button>
+            <button type="button" class="btn btn-primary" id="inviteDoneBtn">Done</button>
+          </div>
+        </section>
+
+        <section class="modal-panel" data-panel="join" hidden>
+          <p>Join the game hosted through <strong id="joinRelayName"></strong>?</p>
+          <p class="modal-note">
+            Moves are end-to-end encrypted: the relay passes them along but cannot read them.
+          </p>
+          <p class="modal-note warn" id="joinReplaceNote" hidden>
+            This replaces the online game you already have on this device.
+          </p>
+          <div class="tool-buttons">
+            <button type="button" class="btn btn-primary" id="joinConfirmBtn">Join game</button>
+            <button type="button" class="btn" id="joinCancelBtn">Cancel</button>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <footer class="app-footer">
+      <p>
+        Your game is saved in this browser and will still be here when you come back. Nothing
+        leaves this device unless you choose to play online.
+      </p>
+    </footer>
+
+    <script src="js/config.js"></script>
+    <script src="js/chess.js"></script>
+    <script src="js/netcrypto.js"></script>
+    <script src="js/protocol.js"></script>
+    <script src="js/vendor/qrcode.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/relayclient.js"></script>
+    <script src="js/online.js"></script>
+  </body>
+</html>

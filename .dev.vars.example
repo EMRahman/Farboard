@@ -1,0 +1,4 @@
+# The owner key for this copy's relay: it lets you start games when the relay
+# is private, and skip the daily cap when it is public. Use a long random
+# value, e.g. from `openssl rand -base64 32`; the people you invite never need it.
+OWNER_KEY=
