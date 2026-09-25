@@ -695,7 +695,6 @@
         el.currentMainBtn.textContent = 'Resume it';
       }
     }
-    el.joinError.textContent = '';
     openModal('menu');
   }
 
@@ -853,19 +852,6 @@
     persist();
     closeModal();
     enter();
-  }
-
-  function joinFromPaste() {
-    var link = P.parseLink(el.joinInput.value.trim());
-    if (link && link.join) {
-      el.joinInput.value = '';
-      offerJoin(link.join);
-    } else if (link && link.setup) {
-      el.joinInput.value = '';
-      openOwner(link.setup);
-    } else {
-      el.joinError.textContent = 'That is not a Farboard invite link.';
-    }
   }
 
   /* ---------------------------------------------------------------- setup */
@@ -1114,9 +1100,6 @@
       'ownerLinkBtn',
       'createInviteBtn',
       'setupBtn',
-      'joinInput',
-      'joinPasteBtn',
-      'joinError',
       'ownerKeyInput',
       'draftKeyInput',
       'copyKeyBtn',
@@ -1199,10 +1182,6 @@
       else openCopy();
     });
     on(el.createInviteBtn, hostGame);
-    on(el.joinPasteBtn, joinFromPaste);
-    el.joinInput.addEventListener('keydown', function (event) {
-      if (event.key === 'Enter') joinFromPaste();
-    });
 
     // Get your own copy
     on(el.copyKeyBtn, function () {
