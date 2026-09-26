@@ -89,11 +89,11 @@ version, run `npx wrangler dev --var PUBLIC_HOSTING:true --var DAILY_GAME_LIMIT:
 
 ## How it runs
 
-[`docs/architecture.html`](docs/architecture.html) is a visual guide to the
-architecture: which Cloudflare pieces Farboard uses, what one game costs
-against the free plan (requests, GB-seconds, SQL rows, storage), and how the
-same app would look on AWS or Vercel. Open it in a browser (GitHub shows the
-source of HTML files rather than rendering them).
+**[How Farboard runs](https://farboard.ehsanr-web.workers.dev/docs/architecture)**
+is a visual guide to the architecture: which Cloudflare pieces Farboard uses,
+what one game costs against the free plan (requests, GB-seconds, SQL rows,
+storage), and how the same app would look on AWS or Vercel. It is served with
+the site from [`public/docs/architecture.html`](public/docs/architecture.html).
 
 ## Publishing
 
@@ -159,7 +159,7 @@ public/                     the website, exactly as served
   js/relayclient.js         online play: the connection to the relay, kept alive
   js/online.js              online play: the session, home card, dialogs and invite QR codes
   js/vendor/qrcode.js       QR code encoder (qrcode-generator, MIT)
-docs/architecture.html      how it runs, what it costs, and the alternatives
+  docs/architecture.html    how it runs, what it costs, and the alternatives
 relay/                      the relay: the Worker's code and its Durable Objects
 wrangler.jsonc              the Cloudflare Worker: the site plus the relay
 test/                       engine, protocol and encryption tests

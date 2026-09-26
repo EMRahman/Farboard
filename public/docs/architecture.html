@@ -93,6 +93,8 @@
     text-transform: uppercase;
     color: var(--accent);
   }
+  a.eyebrow { text-decoration: none; align-self: flex-start; }
+  a.eyebrow:hover { text-decoration: underline; }
   .lede { font-size: 18px; color: var(--dim); max-width: 62ch; }
   .dim { color: var(--dim); }
   .small { font-size: 14px; }
@@ -226,7 +228,7 @@
 
   <header class="hero">
     <div class="hero-text">
-      <span class="eyebrow">Farboard · how it runs</span>
+      <a class="eyebrow" href="../">← Farboard</a>
       <h1>One Worker, one small database per game, and a free plan that cannot bill you</h1>
       <p class="lede">
         Farboard is a static page plus a tiny relay that passes encrypted moves between two players.
