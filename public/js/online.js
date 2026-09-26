@@ -692,6 +692,9 @@
    * message: shown in the hosting section, e.g. why a game was refused.
    */
   function showHome(message) {
+    // A dialog left open, such as the invite for a game the relay just
+    // refused, would hide the reason and offer a link that no longer works.
+    closeModal();
     homeVisible = true;
     el.homeCard.hidden = false;
     el.hostError.textContent = typeof message === 'string' ? message : '';
