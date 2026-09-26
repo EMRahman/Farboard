@@ -96,6 +96,10 @@ h2 {
   font-size: 13px;
 }
 
+.tagline-short {
+  display: none;
+}
+
 .header-actions {
   display: flex;
   gap: 8px;
@@ -1086,8 +1090,12 @@ body.hide-coords .coord {
     padding: 12px 0;
   }
 
-  .tagline {
+  .tagline-full {
     display: none;
+  }
+
+  .tagline-short {
+    display: block;
   }
 }
 
