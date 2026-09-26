@@ -1,6 +1,10 @@
 /*
  * app.js — the board UI.
  *
+ * The board shows the online game that online.js drives through
+ * window.Farboard. With no game in progress it sits idle at the starting
+ * position while the side panel offers to host or join one.
+ *
  * The engine in chess.js holds the position for whatever ply is currently on
  * screen. Moves that have been stepped back over live on a `future` stack, so
  * navigating the game is just a series of undo/redo operations rather than a
@@ -12,9 +16,9 @@
   var Chess = window.ChessEngine.Chess;
   var PIECE_VALUES = window.ChessEngine.PIECE_VALUES;
 
+  // Display preferences only. (ChessTracker, the one-device board Farboard grew
+  // out of, may share this origin; its 'chesstracker:v1' game is not ours to touch.)
   var STORAGE_KEY = 'farboard:v1';
-  // Farboard was called ChessTracker; a game it saved on the same address carries over.
-  var LEGACY_STORAGE_KEY = 'chesstracker:v1';
   var FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
   var RANKS = ['8', '7', '6', '5', '4', '3', '2', '1'];
 
@@ -49,7 +53,6 @@
     selectionMoves: [], // legal moves from the selected square
     preview: false, // true when showing moves for the side NOT to move
     orientation: 'w',
-    autoFlip: false,
     showCoords: true,
     pendingPromotion: null
   };
@@ -58,16 +61,16 @@
   var squares = {}; // square name -> element
 
   /*
-   * Online play (online.js) drives the board through window.Farboard.
-   * While `online` is null — always, unless someone chose to play online —
-   * the board is the ordinary one-device board and none of this applies.
+   * The game online.js has put on the board, or null when there is none and
+   * the board is idle:
+   * { color: 'w' | 'b' | null, outcome: text | null, peerLeft, canTakeBack }
    */
-  var online = null; // { color: 'w' | 'b' | null, outcome: text | null }
+  var online = null;
   var hooks = { move: null, action: null };
 
   /* Whether this device may play `color` right now. */
   function mayMove(color) {
-    return !online || (online.color === color && !online.outcome);
+    return !!online && online.color === color && !online.outcome;
   }
 
   function $(id) {
@@ -81,11 +84,13 @@
     el.moveList = $('moveList');
     el.moveCount = $('moveCount');
     el.emptyMoves = $('emptyMoves');
-    el.emptyMovesLocal = el.emptyMoves.textContent;
+    el.boardPanel = $('boardPanel');
     el.stripTop = $('strip-top');
     el.stripBottom = $('strip-bottom');
     el.overlay = $('boardOverlay');
     el.overlayText = $('overlayText');
+    el.overlayNewGame = $('overlayNewGame');
+    el.toast = $('boardToast');
     el.promotionBackdrop = $('promotionBackdrop');
     el.promotionChoices = $('promotionChoices');
     el.toolFeedback = $('toolFeedback');
@@ -94,7 +99,6 @@
     el.forwardBtn = $('forwardBtn');
     el.lastBtn = $('lastBtn');
     el.undoBtn = $('undoBtn');
-    el.autoFlip = $('autoFlip');
     el.showCoords = $('showCoords');
   }
 
@@ -277,7 +281,7 @@
         ' — ' +
         count +
         (count === 1 ? ' move' : ' moves') +
-        (online ? ' (not yours to play).' : ' (not this side’s turn).');
+        ' (not yours to play).';
     } else {
       el.hint.textContent = label + ' — ' + count + (count === 1 ? ' legal move.' : ' legal moves.');
     }
@@ -285,9 +289,10 @@
   }
 
   function idleHint() {
-    if (!online) return 'Tap any piece to light up every square it can move to.';
+    if (!online) return '';
     if (!online.color) return 'Waiting to hear from the other player…';
-    if (online.outcome || state.game.isGameOver()) return 'The game is over. Ask for a new game to play again.';
+    if (online.peerLeft) return 'Your opponent left. Start a new invite to play again.';
+    if (online.outcome || state.game.isGameOver()) return 'The game is over. Ask for a rematch to play again.';
     if (state.game.turn() !== online.color) {
       return 'Your opponent is thinking — tap their pieces to see what they can do.';
     }
@@ -297,7 +302,7 @@
   /* ----------------------------------------------------------- move entry */
 
   function handleSquareClick(name) {
-    if (state.pendingPromotion) return;
+    if (!online || state.pendingPromotion) return;
 
     if (viewingHistory()) {
       // Playing from a reviewed position would silently discard the rest of
@@ -310,7 +315,7 @@
       return;
     }
 
-    if (state.selected && !state.preview) {
+    if (state.selected && !state.preview && mayMove(state.game.turn())) {
       var chosen = state.selectionMoves.filter(function (m) {
         return m.to === name;
       });
@@ -333,13 +338,9 @@
     var move = state.game.move(request);
     if (!move) return;
 
-    state.future = []; // a new move replaces anything that was taken back
     clearSelection();
-
-    if (state.autoFlip && !online) state.orientation = state.game.turn();
     render();
-    save();
-    if (online && hooks.move) hooks.move(move);
+    if (hooks.move) hooks.move(move);
   }
 
   function askPromotion(from, to, color) {
@@ -401,19 +402,12 @@
 
   function afterNavigation() {
     clearSelection();
-    if (state.autoFlip && !online) state.orientation = state.game.turn();
     render();
-    save();
   }
 
-  /* Permanently remove the most recent move of the game. */
+  /* Your opponent has to agree to a take-back; online.js asks them. */
   function takeBack() {
-    // Online, the opponent has to agree; online.js asks them.
-    if (online) return hooks.action && hooks.action('takeback');
-    goToPly(totalPlies());
-    if (!stepBack()) return;
-    state.future.pop();
-    afterNavigation();
+    if (online && online.canTakeBack && hooks.action) hooks.action('takeback');
   }
 
   function totalPlies() {
@@ -426,7 +420,7 @@
     var status = state.game.status();
     var text = status.text;
     var over = !!status.over;
-    // A resignation or an agreed draw is not visible on the board itself.
+    // A resignation, an agreed draw or a departure is not visible on the board itself.
     if (online && online.outcome) {
       text = online.outcome;
       over = true;
@@ -435,9 +429,12 @@
     el.status.classList.toggle('check', !!status.check && !over);
     el.status.classList.toggle('over', over);
 
-    var showOverlay = over && !viewingHistory();
+    var showOverlay = !!online && !!online.color && over && !viewingHistory();
     el.overlay.hidden = !showOverlay;
-    if (showOverlay) el.overlayText.textContent = text;
+    if (showOverlay) {
+      el.overlayText.textContent = text;
+      el.overlayNewGame.textContent = online.peerLeft ? 'New invite' : 'Rematch (swap colours)';
+    }
   }
 
   function renderStrips() {
@@ -450,9 +447,10 @@
 
   function fillStrip(strip, color, material) {
     var name = color === 'w' ? 'White' : 'Black';
-    strip.classList.toggle('to-move', state.game.turn() === color && !state.game.isGameOver());
-    strip.querySelector('.player-name').textContent =
-      name + (online && online.color === color ? ' (you)' : '');
+    var live = !!online && !online.outcome && !state.game.isGameOver();
+    strip.classList.toggle('to-move', live && state.game.turn() === color);
+    var who = online && online.color ? (online.color === color ? 'You · ' : 'Opponent · ') : '';
+    strip.querySelector('.player-name').textContent = who + name;
     strip.querySelector('.dot').className = 'dot ' + (color === 'w' ? 'white' : 'black');
 
     // The pieces this player has captured are the ones the opponent has lost.
@@ -490,8 +488,6 @@
     el.moveList.innerHTML = '';
     el.moveCount.textContent = all.length;
     el.emptyMoves.hidden = all.length > 0;
-    // Online there may be no physical board to copy the moves from.
-    el.emptyMoves.textContent = online ? 'No moves yet.' : el.emptyMovesLocal;
 
     for (var i = 0; i < all.length; i += 2) {
       var row = document.createElement('li');
@@ -546,11 +542,13 @@
     el.backBtn.disabled = atStart;
     el.forwardBtn.disabled = atEnd;
     el.lastBtn.disabled = atEnd;
-    el.undoBtn.disabled = totalPlies() === 0;
+    el.undoBtn.disabled = !online || !online.canTakeBack;
   }
 
   function render() {
     document.body.classList.toggle('hide-coords', !state.showCoords);
+    document.body.classList.toggle('in-game', !!online);
+    el.boardPanel.classList.toggle('idle', !online);
     orderBoard();
     renderBoard();
     renderStatus();
@@ -562,16 +560,34 @@
 
   /* ------------------------------------------------------------ feedback */
 
+  /* Game events, shown over the foot of the board where the player is looking. */
   var flashTimer = null;
   function flash(message) {
-    el.toolFeedback.textContent = message;
+    el.toast.textContent = message;
+    el.toast.hidden = false;
+    el.toast.classList.remove('fading');
     clearTimeout(flashTimer);
     flashTimer = setTimeout(function () {
+      el.toast.classList.add('fading');
+      flashTimer = setTimeout(function () {
+        el.toast.hidden = true;
+      }, 300);
+    }, 2600);
+  }
+
+  /* Confirmations for the copy buttons, next to them. */
+  var noteTimer = null;
+  function note(message) {
+    el.toolFeedback.textContent = message;
+    clearTimeout(noteTimer);
+    noteTimer = setTimeout(function () {
       el.toolFeedback.textContent = '';
     }, 2600);
   }
 
-  function copyText(text, label) {
+  /* report: where to confirm it; the copy buttons by the board use note(). */
+  function copyText(text, label, report) {
+    var done = report || flash;
     function fallback() {
       var area = document.createElement('textarea');
       area.value = text;
@@ -582,9 +598,9 @@
       area.select();
       try {
         document.execCommand('copy');
-        flash(label + ' copied.');
+        done(label + ' copied.');
       } catch (err) {
-        flash('Could not copy — ' + label + ': ' + text);
+        done('Could not copy — ' + label + ': ' + text);
       }
       document.body.removeChild(area);
     }
@@ -592,7 +608,7 @@
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(
         function () {
-          flash(label + ' copied.');
+          done(label + ' copied.');
         },
         fallback
       );
@@ -605,106 +621,55 @@
 
   function save() {
     try {
-      if (online) {
-        // The board is showing the online game (online.js keeps that). Leave
-        // the stored local game alone and only remember the display choice.
-        var stored =
-          JSON.parse(
-            localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY) || 'null'
-          ) || {};
-        stored.showCoords = state.showCoords;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
-        return;
-      }
-
-      var played = state.game.history({ verbose: true });
-      var upcoming = state.future.slice().reverse();
-      var moves = played.concat(upcoming).map(function (move) {
-        return { from: move.from, to: move.to, promotion: move.promotion };
-      });
-
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          moves: moves,
-          ply: played.length,
-          orientation: state.orientation,
-          autoFlip: state.autoFlip,
-          showCoords: state.showCoords
-        })
-      );
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ showCoords: state.showCoords }));
     } catch (err) {
-      /* private browsing, quota, etc. — the app still works, just not saved */
+      /* private browsing, quota, etc. — only the preference is lost */
     }
   }
 
   function restore() {
-    var saved;
     try {
-      saved = JSON.parse(
-        localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY) || 'null'
-      );
+      var saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+      if (saved) state.showCoords = saved.showCoords !== false;
     } catch (err) {
-      saved = null;
+      /* keep the defaults */
     }
-    if (!saved) return;
-
-    state.orientation = saved.orientation === 'b' ? 'b' : 'w';
-    state.autoFlip = !!saved.autoFlip;
-    state.showCoords = saved.showCoords !== false;
-
-    if (!Array.isArray(saved.moves)) return;
-
-    var game = new Chess();
-    var applied = [];
-    for (var i = 0; i < saved.moves.length; i++) {
-      var move = game.move(saved.moves[i]);
-      if (!move) break; // corrupt entry: keep what replayed cleanly
-      applied.push(move);
-    }
-
-    state.game = game;
-    state.future = [];
-    var ply = Math.min(typeof saved.ply === 'number' ? saved.ply : applied.length, applied.length);
-    while (state.game.moveCount() > ply) stepBack();
   }
 
   function newGame() {
-    if (online) return hooks.action && hooks.action('newgame');
-    if (totalPlies() > 0 && !window.confirm('Start a new game? The current one will be cleared.')) {
-      return;
-    }
-    state.game = new Chess();
-    state.future = [];
-    state.orientation = 'w';
-    clearSelection();
-    render();
-    save();
+    if (hooks.action) hooks.action('newgame');
   }
 
   /* --------------------------------------------------------------- online */
 
   /*
-   * Switch the board into an online game (opts) or back to the local one
-   * (null). The local game stays in storage throughout and comes back as it
-   * was. Calling it again while online just updates colour and result.
+   * Put a game on the board (opts) or leave it idle at the starting position
+   * (null). Calling it again during a game updates colour, result and what
+   * may be asked for; the board is redrawn but the selection is kept.
    */
   function setOnline(opts) {
     if (opts) {
       var colorChanged = !online || online.color !== (opts.color || null);
-      online = { color: opts.color || null, outcome: opts.outcome || null };
+      var outcomeChanged = !online || online.outcome !== (opts.outcome || null);
+      online = {
+        color: opts.color || null,
+        outcome: opts.outcome || null,
+        peerLeft: !!opts.peerLeft,
+        canTakeBack: !!opts.canTakeBack
+      };
       if (colorChanged) state.orientation = online.color || 'w';
-    } else if (online) {
+      if (colorChanged || outcomeChanged) {
+        closePromotion();
+        clearSelection();
+      }
+    } else {
       online = null;
       state.game = new Chess();
       state.future = [];
       state.orientation = 'w';
-      restore();
-      el.autoFlip.checked = state.autoFlip;
+      closePromotion();
+      clearSelection();
     }
-    el.autoFlip.disabled = !!online;
-    closePromotion();
-    clearSelection();
     render();
   }
 
@@ -789,21 +754,8 @@
     });
     el.undoBtn.addEventListener('click', takeBack);
 
-    $('flipBtn').addEventListener('click', function () {
-      state.orientation = state.orientation === 'w' ? 'b' : 'w';
-      render();
-      save();
-    });
-
-    $('newGameBtn').addEventListener('click', newGame);
-    $('overlayNewGame').addEventListener('click', newGame);
-
-    el.autoFlip.addEventListener('change', function () {
-      state.autoFlip = el.autoFlip.checked;
-      if (state.autoFlip) state.orientation = state.game.turn();
-      render();
-      save();
-    });
+    $('flipBtn').addEventListener('click', flip);
+    el.overlayNewGame.addEventListener('click', newGame);
 
     el.showCoords.addEventListener('change', function () {
       state.showCoords = el.showCoords.checked;
@@ -817,20 +769,22 @@
       moves.forEach(function (move) {
         complete.move({ from: move.from, to: move.to, promotion: move.promotion });
       });
+      var mine = online && online.color;
       copyText(
         complete.pgn({
-          Event: 'Over-the-board game',
+          Event: 'Online game',
           Site: 'Farboard',
           Date: new Date().toISOString().slice(0, 10).replace(/-/g, '.'),
-          White: 'White',
-          Black: 'Black'
+          White: mine ? (mine === 'w' ? 'You' : 'Opponent') : 'White',
+          Black: mine ? (mine === 'b' ? 'You' : 'Opponent') : 'Black'
         }),
-        'PGN'
+        'PGN',
+        note
       );
     });
 
     $('copyFenBtn').addEventListener('click', function () {
-      copyText(state.game.fen(), 'FEN');
+      copyText(state.game.fen(), 'FEN', note);
     });
 
     el.promotionChoices.addEventListener('click', function (event) {
@@ -885,9 +839,7 @@
           break;
         case 'f':
         case 'F':
-          state.orientation = state.orientation === 'w' ? 'b' : 'w';
-          render();
-          save();
+          flip();
           break;
         default:
           break;
@@ -895,12 +847,16 @@
     });
   }
 
+  function flip() {
+    state.orientation = state.orientation === 'w' ? 'b' : 'w';
+    render();
+  }
+
   function init() {
     cacheElements();
     restore();
     buildBoard();
     bindEvents();
-    el.autoFlip.checked = state.autoFlip;
     el.showCoords.checked = state.showCoords;
     render();
   }

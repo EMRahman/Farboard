@@ -15,9 +15,9 @@
     />
     <meta
       name="description"
-      content="Follow a chess game on a real board: tap a piece to see every legal move, record the game and keep score of material. Or send a link and play a friend anywhere, end-to-end encrypted."
+      content="Play chess with a friend across the table or across the world. Send a link or show a QR code; no account, nothing to install, moves end-to-end encrypted."
     />
-    <title>Farboard — your chessboard, near and far</title>
+    <title>Farboard — play a friend near or far</title>
     <link rel="stylesheet" href="css/styles.css" />
     <link
       rel="icon"
@@ -30,20 +30,18 @@
         <span class="brand-mark" aria-hidden="true">♞</span>
         <div>
           <h1>Farboard</h1>
-          <p class="tagline">Play on your real board, or with a friend far away.</p>
+          <p class="tagline">Play a friend across the table or across the world.</p>
         </div>
       </div>
       <div class="header-actions">
-        <button type="button" id="onlineBtn" class="btn">Play online</button>
-        <button type="button" id="flipBtn" class="btn" title="Flip the board (F)">
+        <button type="button" id="flipBtn" class="btn game-only" title="Flip the board (F)">
           <span aria-hidden="true">⇅</span> Flip
         </button>
-        <button type="button" id="newGameBtn" class="btn">New game</button>
       </div>
     </header>
 
     <main class="layout">
-      <section class="board-panel" aria-label="Chess board">
+      <section class="board-panel idle" id="boardPanel" aria-label="Chess board">
         <div class="player-strip" id="strip-top">
           <div class="player-id">
             <span class="dot" aria-hidden="true"></span>
@@ -54,6 +52,7 @@
         </div>
 
         <div class="board-wrap">
+          <p class="board-toast" id="boardToast" role="status" aria-live="polite" hidden></p>
           <div
             class="board"
             id="board"
@@ -63,7 +62,7 @@
           <div class="board-overlay" id="boardOverlay" hidden>
             <div class="overlay-card">
               <p class="overlay-text" id="overlayText"></p>
-              <button type="button" class="btn btn-primary" id="overlayNewGame">New game</button>
+              <button type="button" class="btn btn-primary" id="overlayNewGame">Rematch (swap colours)</button>
             </div>
           </div>
         </div>
@@ -79,96 +78,7 @@
       </section>
 
       <aside class="side-panel">
-        <div class="online-card" id="onlineCard" hidden>
-          <div class="online-head">
-            <span class="net-dot" id="netDot" aria-hidden="true"></span>
-            <p class="net-status" id="netStatus" role="status">Connecting…</p>
-          </div>
-          <p class="online-detail" id="netDetail"></p>
-          <div class="request-banner" id="requestBanner" hidden>
-            <p id="requestText"></p>
-            <div class="tool-buttons" id="requestButtons">
-              <button type="button" class="btn small btn-primary" id="requestAccept">Accept</button>
-              <button type="button" class="btn small" id="requestDecline">Decline</button>
-            </div>
-          </div>
-          <div class="tool-buttons">
-            <button type="button" class="btn small" id="drawBtn">Offer draw</button>
-            <button type="button" class="btn small" id="resignBtn">Resign</button>
-          </div>
-          <div class="tool-buttons">
-            <button type="button" class="btn small" id="reconnectBtn" hidden>Reconnect</button>
-            <button type="button" class="btn small" id="inviteAgainBtn" hidden>Invite link</button>
-            <button type="button" class="btn small" id="localBoardBtn">Local board</button>
-          </div>
-        </div>
-
-        <div class="status-card">
-          <p class="status-line" id="status" role="status">White to move</p>
-          <p class="hint" id="hint">Tap any piece to light up every square it can move to.</p>
-        </div>
-
-        <div class="moves-card">
-          <div class="moves-head">
-            <h2>Moves</h2>
-            <span class="move-count" id="moveCount">0</span>
-          </div>
-          <ol class="move-list" id="moveList" aria-label="Move list"></ol>
-          <p class="empty-moves" id="emptyMoves">No moves yet. Make the first move on your board, then tap it here.</p>
-        </div>
-
-        <div class="nav-card" role="group" aria-label="Move navigation">
-          <button type="button" class="btn nav" id="firstBtn" title="Jump to the start">⏮</button>
-          <button type="button" class="btn nav" id="backBtn" title="Step back (←)">◀</button>
-          <button type="button" class="btn nav" id="forwardBtn" title="Step forward (→)">▶</button>
-          <button type="button" class="btn nav" id="lastBtn" title="Jump to the latest move">⏭</button>
-          <button type="button" class="btn nav wide" id="undoBtn" title="Delete the last move (Ctrl+Z)">
-            Take back
-          </button>
-        </div>
-
-        <div class="tools-card">
-          <label class="toggle">
-            <input type="checkbox" id="autoFlip" />
-            <span>Auto-flip to the side to move</span>
-          </label>
-          <label class="toggle">
-            <input type="checkbox" id="showCoords" checked />
-            <span>Show coordinates</span>
-          </label>
-          <div class="tool-buttons">
-            <button type="button" class="btn small" id="copyPgnBtn">Copy PGN</button>
-            <button type="button" class="btn small" id="copyFenBtn">Copy FEN</button>
-          </div>
-          <p class="tool-feedback" id="toolFeedback" role="status"></p>
-        </div>
-      </aside>
-    </main>
-
-    <div class="promotion-backdrop" id="promotionBackdrop" hidden>
-      <div class="promotion-card" role="dialog" aria-modal="true" aria-labelledby="promotionTitle">
-        <p id="promotionTitle">Promote to</p>
-        <div class="promotion-choices" id="promotionChoices"></div>
-        <button type="button" class="btn small" id="promotionCancel">Cancel</button>
-      </div>
-    </div>
-
-    <div class="modal-backdrop" id="onlineModal" hidden>
-      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="onlineTitle">
-        <div class="modal-head">
-          <h2 id="onlineTitle">Play online</h2>
-          <button type="button" class="btn small" id="onlineClose" aria-label="Close">✕</button>
-        </div>
-
-        <section class="modal-panel" data-panel="menu">
-          <div class="modal-section" id="currentSection" hidden>
-            <p id="currentText"></p>
-            <div class="tool-buttons">
-              <button type="button" class="btn btn-primary" id="currentMainBtn">Resume it</button>
-              <button type="button" class="btn" id="currentLeaveBtn">Leave game</button>
-            </div>
-          </div>
-
+        <section class="home-card" id="homeCard" aria-label="Start a game" hidden>
           <div class="modal-section">
             <h3>Host a game</h3>
             <p class="modal-note" id="hostChecking">Checking where games can be hosted…</p>
@@ -238,6 +148,83 @@
             </p>
           </div>
         </section>
+
+        <div class="online-card" id="onlineCard" hidden>
+          <div class="online-head">
+            <span class="net-dot" id="netDot" aria-hidden="true"></span>
+            <p class="net-status" id="netStatus" role="status">Connecting…</p>
+          </div>
+          <p class="online-detail" id="netDetail"></p>
+          <div class="request-banner" id="requestBanner" hidden>
+            <p id="requestText"></p>
+            <div class="tool-buttons" id="requestButtons">
+              <button type="button" class="btn small btn-primary" id="requestAccept">Accept</button>
+              <button type="button" class="btn small" id="requestDecline">Decline</button>
+            </div>
+          </div>
+          <div class="tool-buttons" id="playButtons">
+            <button type="button" class="btn small" id="drawBtn">Offer draw</button>
+            <button type="button" class="btn small" id="resignBtn">Resign</button>
+          </div>
+          <div class="tool-buttons">
+            <button type="button" class="btn small" id="reconnectBtn" hidden>Reconnect</button>
+            <button type="button" class="btn small" id="inviteAgainBtn" hidden>Invite link</button>
+            <button type="button" class="btn small" id="leaveBtn">Leave game</button>
+          </div>
+        </div>
+
+        <div class="status-card game-only">
+          <p class="status-line" id="status" role="status">White to move</p>
+          <p class="hint" id="hint">Tap any piece to light up every square it can move to.</p>
+        </div>
+
+        <div class="moves-card game-only">
+          <div class="moves-head">
+            <h2>Moves</h2>
+            <span class="move-count" id="moveCount">0</span>
+          </div>
+          <ol class="move-list" id="moveList" aria-label="Move list"></ol>
+          <p class="empty-moves" id="emptyMoves">No moves yet.</p>
+        </div>
+
+        <div class="nav-card game-only" role="group" aria-label="Move navigation">
+          <button type="button" class="btn nav" id="firstBtn" title="Jump to the start">⏮</button>
+          <button type="button" class="btn nav" id="backBtn" title="Step back (←)">◀</button>
+          <button type="button" class="btn nav" id="forwardBtn" title="Step forward (→)">▶</button>
+          <button type="button" class="btn nav" id="lastBtn" title="Jump to the latest move">⏭</button>
+          <button type="button" class="btn nav wide" id="undoBtn" title="Ask your opponent to take back your last move (Ctrl+Z)">
+            Ask to take back
+          </button>
+        </div>
+
+        <div class="tools-card game-only">
+          <label class="toggle">
+            <input type="checkbox" id="showCoords" checked />
+            <span>Show coordinates</span>
+          </label>
+          <div class="tool-buttons">
+            <button type="button" class="btn small" id="copyPgnBtn">Copy PGN</button>
+            <button type="button" class="btn small" id="copyFenBtn">Copy FEN</button>
+          </div>
+          <p class="tool-feedback" id="toolFeedback" role="status"></p>
+        </div>
+      </aside>
+    </main>
+
+    <div class="promotion-backdrop" id="promotionBackdrop" hidden>
+      <div class="promotion-card" role="dialog" aria-modal="true" aria-labelledby="promotionTitle">
+        <p id="promotionTitle">Promote to</p>
+        <div class="promotion-choices" id="promotionChoices"></div>
+        <button type="button" class="btn small" id="promotionCancel">Cancel</button>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="onlineModal" hidden>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="onlineTitle">
+        <div class="modal-head">
+          <h2 id="onlineTitle">Play online</h2>
+          <button type="button" class="btn small" id="onlineClose" aria-label="Close">✕</button>
+        </div>
 
         <section class="modal-panel" data-panel="copy" hidden>
           <p class="modal-note">
@@ -353,8 +340,12 @@
 
     <footer class="app-footer">
       <p>
-        Your game is saved in this browser and will still be here when you come back. Nothing
-        leaves this device unless you choose to play online.
+        Moves are end-to-end encrypted: the relay passes them along but cannot read them.
+      </p>
+      <p>
+        Playing over a real board?
+        <a href="https://emrahman.github.io/ChessTracker/" target="_blank" rel="noopener">Try ChessTracker</a>
+        to follow the game on screen.
       </p>
     </footer>
 
