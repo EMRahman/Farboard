@@ -252,9 +252,10 @@
     <h2 id="arch-h">What talks to what</h2>
     <p>
       Everything lives in a single Cloudflare Worker named <code>farboard</code>. Files in
-      <code>public/</code> are served straight from Cloudflare's edge without running any code. The
-      Worker's own code, in <code>relay/src/index.js</code>, only runs for the four <code>/v1/</code>
-      routes. Each game gets its own <em>Durable Object</em>: a small, single-threaded server with its
+      <code>public/</code> are served straight from Cloudflare's edge without running any code. Any
+      other request runs the Worker's own code, in <code>relay/src/index.js</code>. That code answers
+      the four <code>/v1/</code> routes and returns a 404 for everything else, such as a mistyped
+      address or a bot probing for common paths. Each game gets its own <em>Durable Object</em>: a small, single-threaded server with its
       own database, which both players' WebSockets connect to.
     </p>
 
@@ -438,7 +439,8 @@
         <p>
           One run of the Worker's code for an incoming HTTP request. A WebSocket counts once, when it
           opens, however long it then stays open. Requests for the page's own files are served as static
-          assets and are not counted.
+          assets and are not counted, but a request for a file that does not exist runs the Worker and
+          is counted, even though it only gets a 404.
         </p>
         <p class="example">Opening Farboard's home screen costs 2: <code>/v1/info</code> and <code>/v1/stats</code>. The HTML, CSS, JS and icons are free.</p>
       </div>
