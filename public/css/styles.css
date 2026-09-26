@@ -203,6 +203,44 @@ h2 {
   height: var(--board-size);
 }
 
+/* With no game in progress the board is only a backdrop to the home card. */
+.board-panel.idle .board-wrap,
+.board-panel.idle .player-strip {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* Cards that only mean something during a game. */
+body:not(.in-game) .game-only {
+  display: none;
+}
+
+/* Game events, over the foot of the board. */
+.board-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 6;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(20, 19, 16, 0.9);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 14px;
+  text-align: center;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.board-toast.fading {
+  opacity: 0;
+}
+
 .board {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
@@ -776,21 +814,25 @@ body.hide-coords .coord {
   font-size: 18px;
 }
 
-.modal-panel {
+.modal-panel,
+.home-card {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.modal-panel p {
+.modal-panel p,
+.home-card p {
   margin: 0;
 }
 
-.modal-panel .tool-buttons {
+.modal-panel .tool-buttons,
+.home-card .tool-buttons {
   flex-wrap: wrap;
 }
 
-.modal-panel .tool-buttons .btn {
+.modal-panel .tool-buttons .btn,
+.home-card .tool-buttons .btn {
   flex: 1 1 auto;
 }
 
@@ -804,7 +846,14 @@ body.hide-coords .coord {
   border-radius: 8px;
 }
 
-.modal-panel h3 {
+/* On the page itself the sections sit on the page background, so raise them. */
+.home-card .modal-section {
+  background: var(--panel);
+  padding: 14px;
+}
+
+.modal-panel h3,
+.home-card h3 {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
@@ -991,7 +1040,11 @@ body.hide-coords .coord {
 }
 
 .app-footer p {
-  margin: 0;
+  margin: 0 0 4px;
+}
+
+.app-footer a {
+  color: var(--accent);
 }
 
 /* ------------------------------------------------------------- responsive */
@@ -1008,6 +1061,11 @@ body.hide-coords .coord {
 
   .side-panel {
     width: min(94vw, 520px);
+  }
+
+  /* With no game yet, starting one matters more than the idle board. */
+  body:not(.in-game) .side-panel {
+    order: -1;
   }
 
   .move-list {

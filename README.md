@@ -1,74 +1,58 @@
 # Farboard
 
-Play on your real board, or with a friend far away.
+Play a friend across the table or across the world.
 
 **[Open Farboard](https://farboard.ehsanr-web.workers.dev/)**
 (also at [emrahman.github.io/Farboard](https://emrahman.github.io/Farboard/))
 
-Playing over the board means holding the whole position in your head: which
-piece is where, what each one can reach, what you have already given up.
-Farboard takes that load off. You play your move on the physical board,
-tap the same move here, and the screen shows you the position, every legal
-move for whatever piece you tap, and the running material count.
+Create an invite, and your opponent scans the QR code or opens the link. You
+each play on your own device, wherever you are, with nothing to install and no
+account. Moves are end-to-end encrypted.
 
-It is not an engine and it will not suggest moves. It is a mirror of your
-board that knows the rules.
-
-When your opponent is not in the room, send them a link or show them a QR
-code: you each play on your own device, anywhere, with nothing to install and
-no account. See [Play online](#play-online).
+Playing over a real board instead? [ChessTracker](https://emrahman.github.io/ChessTracker/)
+follows a game played with real pieces on one device.
 
 ## What it does
 
-- **Digital board** with the pieces drawn as clear symbols, in the familiar
-  green-and-cream style.
+- **Invite by QR code or link.** **Create invite** shows both; whoever opens it
+  first takes the other seat. Choose to play White, Black or a random colour.
 - **Tap a piece to see every legal move.** Quiet moves appear as dots,
   captures as rings. Pins, checks, castling and en passant are all handled, so
   what you see really is what is legal.
-- **Tap an opponent piece to preview its moves** in amber, without playing
-  anything — useful for checking a threat before you commit.
-- **Move recording** in standard notation (`e4`, `Nf3`, `O-O`, `exd5`,
-  `hxg8=Q+`), numbered the way a scoresheet is.
-- **Turns switch automatically**; the strip belonging to the side to move is
-  outlined. Turn on *auto-flip* and the board rotates to face whoever is
-  moving, which suits two people sharing one phone.
-- **Take back a mistake** with the take-back button or `Ctrl`+`Z`. Step
-  through the game with the arrow buttons, the arrow keys, or by tapping any
-  move in the list.
+- **Tap an opponent piece to preview its moves** in amber — useful for
+  checking a threat before you commit. You can only move your own pieces, on
+  your turn.
+- **Requests the opponent answers**: ask to take back your last move, offer a
+  draw, or, once a game is over, ask for a rematch (colours swap). Either side
+  can resign.
+- **Game events show on the board**: your opponent's move, their requests and
+  their answers, so you see them without looking away.
+- **Move list** in standard notation (`e4`, `Nf3`, `O-O`, `exd5`, `hxg8=Q+`).
+  Step through the game with the arrow buttons, the arrow keys, or by tapping
+  any move; new moves keep arriving while you look back.
 - **Captured pieces and points.** Each player's strip shows the pieces they
   have taken and their material lead (`+3`), using the usual values —
   pawn 1, knight and bishop 3, rook 5, queen 9.
 - **Game end is detected**: checkmate, stalemate, insufficient material,
   threefold repetition and the fifty-move rule.
-- **Your game is saved in the browser.** Close the tab, come back, and the
-  game is where you left it.
+- **Games survive** reloads, phones going to sleep and patchy networks;
+  whatever was missed is caught up on reconnect. Open the page again and you
+  are back in your game.
 - **Copy PGN or FEN** to keep the game or drop the position into an analysis
   tool afterwards.
 
-## Play online
+## Hosting and your own copy
 
-Besides the one-device board, you can play someone on another device, anywhere.
-The one-device board stays the default and is untouched: it never contacts
-anything unless you choose **Play online**.
-
-- **Hosting**: **Play online → Create invite** shows a QR code and a link.
-  Games go through this site's relay, which allows 100 new games a day; the
-  menu shows how many are left.
+- Games go through this site's relay, which allows 100 new games a day; the
+  home screen shows how many are left.
 - **Joining** needs nothing: scan the host's QR code with your phone camera or
-  open their link, confirm, and play. No account, no install.
+  open their link, confirm, and play.
 - **Get your own copy** (optional): the whole app, page and relay, on your own free
-  Cloudflare account at your own address, with no daily limit for you. Under
-  **Play online → Get your own copy**, copy the owner key the app generates, press
-  **Deploy to Cloudflare** (you will need free Cloudflare and GitHub accounts),
-  paste the key when asked for `OWNER_KEY`, then paste your copy's address and
-  choose **Open**; your key goes with you.
-- Each device plays its own colour and can only move on its turn. Take-backs,
-  draws and new games are requests the opponent accepts or declines; colours
-  swap for each new game. Either side can resign.
-- Games survive reloads, phones going to sleep and patchy networks; whatever
-  was missed is caught up on reconnect. **Local board** returns to your
-  one-device game exactly as you left it, and the online game can be resumed
-  from **Play online**.
+  Cloudflare account at your own address, with no daily limit for you. Choose
+  **Get your own copy** under *Host a game*, copy the owner key the app
+  generates, press **Deploy to Cloudflare** (you will need free Cloudflare and
+  GitHub accounts), paste the key when asked for `OWNER_KEY`, then paste your
+  copy's address and choose **Open**; your key goes with you.
 
 How it is kept private:
 
@@ -90,11 +74,8 @@ How it is kept private:
 
 ## Running it
 
-The one-device board needs no build step and no dependencies: open
-`public/index.html` in a browser (double-clicking the file works), or serve the
-folder with `npm start` and visit http://localhost:8000.
-
-For online play too, run the whole app as it runs on Cloudflare:
+The page itself needs no build step, but playing needs a relay, so run the
+whole app as it runs on Cloudflare:
 
 ```sh
 npm install
@@ -102,8 +83,8 @@ cp .dev.vars.example .dev.vars   # then put an OWNER_KEY in it
 npm run dev                      # http://localhost:8787
 ```
 
-Its relay is private, so choose **Play online → I'm the owner** and enter the
-key. Open the invite in a private window to play yourself. To try the public
+Its relay is private, so choose **I'm the owner** under *Host a game* and enter
+the key. Open the invite in a private window to play yourself. To try the public
 version, run `npx wrangler dev --var PUBLIC_HOSTING:true --var DAILY_GAME_LIMIT:2`.
 
 ## Publishing
@@ -130,7 +111,7 @@ The app is published in two places:
 
 The button copies this repository into your GitHub account and deploys it to
 your Cloudflare account. Your copy is private until you choose otherwise; the
-app walks you through it under **Play online → Get your own copy**.
+app walks you through it under **Get your own copy**.
 
 ## Keyboard shortcuts
 
@@ -138,7 +119,7 @@ app walks you through it under **Play online → Get your own copy**.
 | --- | --- |
 | `←` / `→` | Step back / forward through the game |
 | `Home` / `End` | Jump to the start / the latest move |
-| `Ctrl`+`Z` | Take back the last move |
+| `Ctrl`+`Z` | Ask to take back your last move |
 | `F` | Flip the board |
 | `Esc` | Clear the current selection |
 
@@ -164,11 +145,11 @@ public/                     the website, exactly as served
   css/styles.css            styling and the responsive layout
   js/config.js              the shared relay for copies without their own
   js/chess.js               the rules engine — no DOM, testable on its own
-  js/app.js                 board rendering, tap handling, move list, storage
+  js/app.js                 board rendering, tap handling, move list
   js/protocol.js            online play: what messages mean and whether to believe them
   js/netcrypto.js           online play: invite secret, room id, encryption
   js/relayclient.js         online play: the connection to the relay, kept alive
-  js/online.js              online play: the session, dialogs and invite QR codes
+  js/online.js              online play: the session, home card, dialogs and invite QR codes
   js/vendor/qrcode.js       QR code encoder (qrcode-generator, MIT)
 relay/                      the relay: the Worker's code and its Durable Objects
 wrangler.jsonc              the Cloudflare Worker: the site plus the relay

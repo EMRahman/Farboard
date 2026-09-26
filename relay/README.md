@@ -28,7 +28,7 @@ every copy starts out private.
 
 **A copy of your own**: press the button. It copies the repository into your
 GitHub account, deploys it to your Cloudflare account, and asks for
-`OWNER_KEY`; Farboard's **Play online → Get your own copy** generates one for
+`OWNER_KEY`; Farboard's **Get your own copy** (under *Host a game*) generates one for
 you and walks you through the rest.
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/EMRahman/Farboard)
@@ -52,7 +52,7 @@ Worker start with it switched off.
 
 1. Set `PUBLIC_HOSTING` to `true`, and `DAILY_GAME_LIMIT` if you want something
    other than 100.
-2. On the site, choose **Play online → I'm the owner** and enter the owner
+2. On the site, choose **I'm the owner** (under *Host a game*) and enter the owner
    key. Games you start are then never turned away, though they still count.
 
 What the limit does:

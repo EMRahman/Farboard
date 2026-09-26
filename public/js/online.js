@@ -1,9 +1,9 @@
 /*
- * online.js — playing someone on another device, through your own relay.
+ * online.js — playing someone on another device, through a relay.
  *
- * Nothing here runs unless asked. The page loads as the ordinary one-device
- * board; this file only looks at the address bar for an invite or a setup
- * link, and otherwise waits for the Play online button.
+ * On load this file looks at the address bar for an invite or a setup link.
+ * Otherwise it resumes the game saved on this device, or, with none, shows
+ * the home card: host a game, or how to join one.
  *
  * Who does what:
  *   online.js     the online session (who we are, the shared game state),
@@ -41,7 +41,6 @@
   var DEPLOY_URL = CONFIG.deployUrl || '';
 
   var TITLES = {
-    menu: 'Play online',
     copy: 'Get your own copy',
     owner: 'Owner key',
     invite: 'Invite your opponent',
@@ -72,6 +71,7 @@
   var pending = null; // our request awaiting their answer: { id, kind }
   var incoming = null; // their request awaiting ours: { id, kind }
   var pendingJoin = null; // an invite awaiting confirmation: { secret, relay }
+  var homeVisible = false;
   var outbox = Promise.resolve();
   var inbox = Promise.resolve();
   var currentPanel = null;
@@ -188,34 +188,31 @@
 
   /* --------------------------------------------------------- the session */
 
-  /* Show the online game on the board and start talking to the relay. */
+  /* Show the game on the board and start talking to the relay. */
   function enter() {
     active = true;
     pending = null;
     incoming = null;
+    homeVisible = false;
+    el.homeCard.hidden = true;
     showState();
     el.onlineCard.hidden = false;
-    updateHeader();
     connect();
   }
 
-  /* Back to the local board. The online game is kept to resume later. */
-  function leave() {
-    disconnect();
-    active = false;
-    pending = null;
-    incoming = null;
-    app.setOnline(null);
-    el.onlineCard.hidden = true;
-    document.title = baseTitle;
-    updateHeader();
-  }
-
+  /* Drop the game on this device (the relay is not told; see leaveForGood). */
   function forget() {
-    if (active) leave();
+    if (active) {
+      disconnect();
+      active = false;
+      pending = null;
+      incoming = null;
+      app.setOnline(null);
+      el.onlineCard.hidden = true;
+      document.title = baseTitle;
+    }
     session = null;
     persist();
-    updateHeader();
   }
 
   /*
@@ -255,11 +252,23 @@
 
   function showState() {
     var s = session.state;
-    var outcome = s && s.outcome ? P.outcomeText(s.outcome) : null;
-    if (!outcome && session.peerLeft && !(s && P.gameOver(s))) outcome = 'Your opponent left the game';
-    app.setOnline({ color: myColor(), outcome: outcome });
+    boardFlags();
     app.loadGame(s ? s.moves.map(P.decodeMove) : []);
     renderCard();
+  }
+
+  /* Tell the board who we are, how the game stands and what we may ask for. */
+  function boardFlags() {
+    var s = session.state;
+    var outcome = s && s.outcome ? P.outcomeText(s.outcome) : null;
+    if (!outcome && session.peerLeft && !(s && P.gameOver(s))) outcome = 'Your opponent left the game';
+    var mine = myColor();
+    app.setOnline({
+      color: mine,
+      outcome: outcome,
+      peerLeft: !!session.peerLeft,
+      canTakeBack: !!s && !s.outcome && !session.peerLeft && !!mine && !!P.takebackPlies(s.moves, mine)
+    });
   }
 
   function connect() {
@@ -331,7 +340,7 @@
     // drop it and say why where the host asked for it.
     if (status === 'stopped' && (detail === 'daily-limit' || detail === 'network-limit')) {
       forget();
-      openMenu(detail === 'daily-limit' ? dailyLimitText(null) : networkLimitText());
+      showHome(detail === 'daily-limit' ? dailyLimitText(null) : networkLimitText());
       return;
     }
     linkStatus = status;
@@ -468,6 +477,7 @@
       }
       session.state.moves.push(body.m);
       persist();
+      boardFlags();
       renderCard();
       app.flash('Opponent played ' + played.san + '.');
       nudge('Your move');
@@ -483,22 +493,22 @@
   var REQUEST_TEXT = {
     takeback: 'Your opponent asks to take back their last move.',
     draw: 'Your opponent offers a draw.',
-    newgame: 'Your opponent asks for a new game (colours swap).'
+    newgame: 'Your opponent asks for a rematch (colours swap).'
   };
   var ASKED_TEXT = {
     takeback: 'Asked to take back your move…',
     draw: 'Offered a draw…',
-    newgame: 'Asked for a new game…'
+    newgame: 'Asked for a rematch…'
   };
   var ACCEPTED_TEXT = {
     takeback: 'Move taken back.',
     draw: 'Draw agreed.',
-    newgame: 'New game started.'
+    newgame: 'Rematch on.'
   };
   var DECLINED_TEXT = {
     takeback: 'Your opponent declined the take-back.',
     draw: 'Your opponent declined the draw.',
-    newgame: 'Your opponent declined a new game.'
+    newgame: 'Your opponent declined a rematch.'
   };
 
   /* Ask the other side (take-back, draw or new game). */
@@ -508,7 +518,7 @@
       // Nobody to ask. A new game means a new invite.
       if (kind !== 'newgame') return app.flash('Your opponent has left this game.');
       leaveForGood();
-      return openMenu();
+      return showHome();
     }
     var s = session.state;
     if (!peerOnline) return app.flash('Your opponent is not connected right now.');
@@ -517,13 +527,8 @@
       return app.flash('There is no move of yours to take back.');
     }
     if (kind === 'draw' && P.gameOver(s)) return app.flash('The game is already over.');
-    if (
-      kind === 'newgame' &&
-      !P.gameOver(s) &&
-      !window.confirm('Ask for a new game? This one would be abandoned.')
-    ) {
-      return;
-    }
+    // Rematches are offered once a game is over; until then, resign first.
+    if (kind === 'newgame' && !P.gameOver(s)) return app.flash('Finish or resign this game first.');
     pending = { id: C.randomToken(9), kind: kind };
     send({ t: 'request', id: pending.id, kind: kind });
     renderCard();
@@ -537,6 +542,11 @@
     }
     incoming = { id: body.id, kind: body.kind };
     renderCard();
+    app.flash(REQUEST_TEXT[body.kind]);
+    // On a phone the answer buttons sit below the board; bring them into view.
+    if (window.matchMedia('(max-width: 860px)').matches) {
+      el.requestBanner.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
     nudge('Your opponent is asking');
   }
 
@@ -588,6 +598,7 @@
     session.state.moves.push(m);
     persist();
     send({ t: 'move', rev: session.state.rev, ply: ply, m: m });
+    boardFlags();
     renderCard();
   }
 
@@ -640,15 +651,22 @@
     }
     el.requestBanner.hidden = !incoming && !pending;
 
-    el.drawBtn.disabled = !color || over || !peerOnline || !!pending || !!session.peerLeft;
-    el.resignBtn.disabled = !color || over || !!session.peerLeft;
+    // Once the game is over the board's overlay offers what comes next.
+    el.playButtons.hidden = over || !!session.peerLeft;
+    el.drawBtn.disabled = !color || !peerOnline || !!pending;
+    el.resignBtn.disabled = !color;
     el.reconnectBtn.hidden = linkStatus !== 'stopped';
-    el.inviteAgainBtn.hidden = session.role !== 'host' || !!session.peerLeft;
-    el.localBoardBtn.textContent = session.peerLeft ? 'Close game' : 'Local board';
+    el.inviteAgainBtn.hidden = session.role !== 'host' || !!session.peerLeft || over;
+    el.leaveBtn.textContent = session.peerLeft || over ? 'Close game' : 'Leave game';
   }
 
-  function updateHeader() {
-    el.onlineBtn.textContent = active ? 'Online game' : 'Play online';
+  /* Leave the game for good and go home; mid-game, only once confirmed. */
+  function leaveGame() {
+    var s = session && session.state;
+    var settled = !s || session.peerLeft || P.gameOver(s);
+    if (!settled && !window.confirm('Leave this game for good? You will not be able to rejoin it.')) return;
+    leaveForGood();
+    showHome();
   }
 
   /* -------------------------------------------------------------- dialogs */
@@ -669,38 +687,27 @@
     currentPanel = null;
   }
 
-  /* message: shown in the hosting section, e.g. why a game was refused. */
-  function openMenu(message) {
+  /*
+   * The home card, shown whenever there is no game: host one, or how to join.
+   * message: shown in the hosting section, e.g. why a game was refused.
+   */
+  function showHome(message) {
+    // A dialog left open, such as the invite for a game the relay just
+    // refused, would hide the reason and offer a link that no longer works.
+    closeModal();
+    homeVisible = true;
+    el.homeCard.hidden = false;
     el.hostError.textContent = typeof message === 'string' ? message : '';
     el.hostChecking.hidden = false;
     el.hostReady.hidden = true;
     el.hostOwnerOnly.hidden = true;
     el.hostSetupNeeded.hidden = true;
     findHouse().then(renderHosting);
-
-    el.currentSection.hidden = !session;
-    if (session) {
-      var color = myColor();
-      var who = color ? ' (you play ' + COLOR_NAMES[color] + ')' : '';
-      if (session.peerLeft) {
-        el.currentText.textContent = 'Your opponent left your online game' + who + '.';
-        el.currentMainBtn.textContent = active ? 'Back to local board' : 'Look at it';
-      } else if (active) {
-        el.currentText.textContent = 'You are in an online game' + who + '.';
-        el.currentMainBtn.textContent = 'Back to local board';
-      } else {
-        var moves = session.state ? session.state.moves.length : 0;
-        el.currentText.textContent =
-          'You have an online game in progress' + who + ', ' + moves + (moves === 1 ? ' move' : ' moves') + ' so far.';
-        el.currentMainBtn.textContent = 'Resume it';
-      }
-    }
-    openModal('menu');
   }
 
-  /* The hosting part of the menu, once we know which relay this site has. */
+  /* The hosting part of the home card, once we know which relay this site has. */
   function renderHosting() {
-    if (currentPanel !== 'menu') return;
+    if (!homeVisible) return;
     var own = relayConfig();
     var hosting = hostingRelay();
     var ours = house && house.url === location.origin;
@@ -742,7 +749,7 @@
       })
       .then(function (stats) {
         sharedStats = stats;
-        if (currentPanel !== 'menu') return;
+        if (!homeVisible) return;
         if (!stats.publicHosting) {
           el.hostStats.textContent = 'It is not taking new games at the moment.';
           el.createInviteBtn.disabled = true;
@@ -782,7 +789,7 @@
   }
 
   function describeHostColor() {
-    var picked = el.modal.querySelector('input[name="hostColor"]:checked');
+    var picked = el.homeCard.querySelector('input[name="hostColor"]:checked');
     var value = picked ? picked.value : 'w';
     if (value === 'random') return Math.random() < 0.5 ? 'w' : 'b';
     return value;
@@ -790,7 +797,7 @@
 
   function hostGame() {
     var hosting = hostingRelay();
-    if (!hosting) return openMenu();
+    if (!hosting) return showHome();
     if (session && !window.confirm('Start a new online game? You will leave the one you have now.')) return;
     leaveForGood();
     session = {
@@ -1061,7 +1068,7 @@
 
   function cacheElements() {
     [
-      'onlineBtn',
+      'homeCard',
       'onlineCard',
       'netDot',
       'netStatus',
@@ -1071,17 +1078,14 @@
       'requestButtons',
       'requestAccept',
       'requestDecline',
+      'playButtons',
       'drawBtn',
       'resignBtn',
       'reconnectBtn',
       'inviteAgainBtn',
-      'localBoardBtn',
+      'leaveBtn',
       'onlineTitle',
       'onlineClose',
-      'currentSection',
-      'currentText',
-      'currentMainBtn',
-      'currentLeaveBtn',
       'hostChecking',
       'hostReady',
       'hostOwnerOnly',
@@ -1138,7 +1142,6 @@
   }
 
   function bindEvents() {
-    on(el.onlineBtn, openMenu);
     on(el.onlineClose, closeModal);
     el.modal.addEventListener('click', function (event) {
       if (event.target === el.modal) closeModal();
@@ -1149,20 +1152,7 @@
       event.stopPropagation();
     });
 
-    // Menu
-    on(el.currentMainBtn, function () {
-      if (active) {
-        leave();
-      } else {
-        enter();
-      }
-      closeModal();
-    });
-    on(el.currentLeaveBtn, function () {
-      if (!window.confirm('Leave this online game for good? You will not be able to rejoin it.')) return;
-      leaveForGood();
-      openMenu();
-    });
+    // Home
     on(el.setupBtn, openCopy);
     on(el.ownerOnlyCopyBtn, openCopy);
     on(el.haveRelayBtn, function () {
@@ -1191,14 +1181,18 @@
     el.copyAddressInput.addEventListener('keydown', function (event) {
       if (event.key === 'Enter') openCopyTarget();
     });
-    on(el.copyBackBtn, openMenu);
+    on(el.copyBackBtn, closeModal);
 
     // Owner key
     on(el.checkRelayBtn, checkRelay);
     el.ownerKeyInput.addEventListener('keydown', function (event) {
       if (event.key === 'Enter') checkRelay();
     });
-    on(el.setupBackBtn, openMenu);
+    on(el.setupBackBtn, function () {
+      closeModal();
+      // A key saved or forgotten there may change where this device can host.
+      if (homeVisible) renderHosting();
+    });
     on(el.otherDeviceBtn, showOtherDevice);
     on(el.forgetRelayBtn, forgetRelay);
 
@@ -1235,10 +1229,7 @@
     on(el.resignBtn, resign);
     on(el.reconnectBtn, connect);
     on(el.inviteAgainBtn, showInvite);
-    on(el.localBoardBtn, function () {
-      if (session && session.peerLeft) leaveForGood();
-      else leave();
-    });
+    on(el.leaveBtn, leaveGame);
 
     window.addEventListener('hashchange', readAddressBar);
     document.addEventListener('visibilitychange', function () {
@@ -1253,9 +1244,9 @@
     app.onLocalMove(onLocalMove);
     app.onAction(request);
     session = loadSession();
-    updateHeader();
-    // An online game in progress is offered, never switched to silently.
-    if (!readAddressBar() && session) openMenu();
+    if (session) enter();
+    else showHome();
+    readAddressBar();
   }
 
   if (document.readyState === 'loading') {
