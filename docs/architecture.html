@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Farboard Architecture</title>
+<meta name="description" content="How Farboard runs on Cloudflare, what one game costs against the free plan, and how the same app would look on AWS or Vercel." />
+<style>
+  :root {
+    --bg: #eef0e6;
+    --surface: #ffffff;
+    --surface-2: #e3e7d8;
+    --border: #cbd0bd;
+    --text: #22241f;
+    --dim: #5b6054;
+    --accent: #4b7a1f;
+    --accent-ink: #ffffff;
+    --accent-soft: #dde8cc;
+    --warn: #a86400;
+    --danger: #b3402a;
+    --sq-light: #eeeed2;
+    --sq-dark: #769656;
+    --diagram-cf: rgba(75, 122, 31, 0.07);
+    --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #302e2b;
+      --surface: #262421;
+      --surface-2: #3a3835;
+      --border: #4a4843;
+      --text: #f1f0ee;
+      --dim: #aaa59c;
+      --accent: #81b64c;
+      --accent-ink: #1b2a10;
+      --accent-soft: rgba(129, 182, 76, 0.16);
+      --warn: #e0a03c;
+      --danger: #e2735b;
+      --diagram-cf: rgba(129, 182, 76, 0.07);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #302e2b;
+    --surface: #262421;
+    --surface-2: #3a3835;
+    --border: #4a4843;
+    --text: #f1f0ee;
+    --dim: #aaa59c;
+    --accent: #81b64c;
+    --accent-ink: #1b2a10;
+    --accent-soft: rgba(129, 182, 76, 0.16);
+    --warn: #e0a03c;
+    --danger: #e2735b;
+    --diagram-cf: rgba(129, 182, 76, 0.07);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.55 var(--sans);
+    padding: 0 20px;
+    -webkit-text-size-adjust: 100%;
+  }
+  .page {
+    max-width: 960px;
+    margin: 0 auto;
+    padding-block: 40px 64px;
+    display: flex;
+    flex-direction: column;
+    gap: 56px;
+  }
+  h1, h2, h3 { margin: 0; line-height: 1.2; text-wrap: balance; font-weight: 650; }
+  h1 { font-size: clamp(30px, 5vw, 42px); letter-spacing: -0.5px; }
+  h2 { font-size: 24px; letter-spacing: -0.2px; }
+  h3 { font-size: 17px; }
+  p { margin: 0; max-width: 68ch; }
+  a { color: var(--accent); }
+  code, .mono { font-family: var(--mono); font-size: 0.88em; }
+  code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  section { display: flex; flex-direction: column; gap: 18px; }
+  .eyebrow {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .lede { font-size: 18px; color: var(--dim); max-width: 62ch; }
+  .dim { color: var(--dim); }
+  .small { font-size: 14px; }
+
+  /* Hero ------------------------------------------------------------- */
+  header.hero { display: grid; grid-template-columns: 1fr auto; gap: 28px; align-items: end; }
+  .hero-text { display: flex; flex-direction: column; gap: 14px; }
+  .mini-board {
+    width: 112px; height: 112px;
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    border-radius: 6px; overflow: hidden;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  }
+  .mini-board span { background: var(--sq-light); }
+  .mini-board span:nth-child(8n + 2), .mini-board span:nth-child(8n + 4),
+  .mini-board span:nth-child(8n + 5), .mini-board span:nth-child(8n + 7) { background: var(--sq-dark); }
+  .facts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .fact {
+    font-size: 13px; padding: 5px 10px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--text);
+  }
+
+  /* Diagram ---------------------------------------------------------- */
+  .scroll { overflow-x: auto; }
+  .diagram { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+  .diagram svg { display: block; width: 100%; min-width: 680px; height: auto; }
+  .d-box { fill: var(--surface-2); stroke: var(--border); stroke-width: 1.2; }
+  .d-box.key { fill: var(--accent-soft); stroke: var(--accent); }
+  .d-cf { fill: var(--diagram-cf); stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 6 5; }
+  .d-group { fill: none; stroke: var(--border); stroke-width: 1.2; stroke-dasharray: 3 4; }
+  .d-title { fill: var(--text); font: 600 15px var(--sans); }
+  .d-text { fill: var(--dim); font: 12.5px var(--sans); }
+  .d-code { fill: var(--dim); font: 12px var(--mono); }
+  .d-label { fill: var(--accent); font: 600 12px var(--sans); }
+  .d-line { stroke: var(--dim); stroke-width: 1.5; fill: none; }
+  .d-line.ws { stroke: var(--accent); stroke-width: 2.2; }
+  .d-arrow { fill: var(--dim); }
+  .d-arrow.ws { fill: var(--accent); }
+
+  /* Cards and lists -------------------------------------------------- */
+  .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px 20px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .card p { font-size: 15px; }
+  .card .example { font-size: 14px; color: var(--dim); border-top: 1px solid var(--border); padding-top: 8px; margin-top: 2px; }
+  .term { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .allow { font-family: var(--mono); font-size: 13px; color: var(--accent); white-space: nowrap; }
+
+  ol.steps { margin: 0; padding: 0; list-style: none; counter-reset: step; display: flex; flex-direction: column; }
+  ol.steps li {
+    counter-increment: step;
+    display: grid; grid-template-columns: 34px 1fr auto; gap: 4px 14px; align-items: baseline;
+    padding: 12px 0; border-bottom: 1px solid var(--border);
+  }
+  ol.steps li::before {
+    content: counter(step);
+    font: 600 13px var(--mono); color: var(--accent-ink); background: var(--accent);
+    width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center;
+  }
+  ol.steps .what { display: flex; flex-direction: column; gap: 2px; }
+  ol.steps .what span { font-size: 14px; color: var(--dim); }
+  ol.steps .cost { font-family: var(--mono); font-size: 13px; color: var(--dim); text-align: right; white-space: nowrap; }
+
+  /* Budget meters ---------------------------------------------------- */
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: center;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px;
+  }
+  .controls label { font-size: 14px; color: var(--dim); display: flex; align-items: center; gap: 10px; }
+  .games-out { font: 650 28px var(--sans); color: var(--text); font-variant-numeric: tabular-nums; min-width: 4.5ch; }
+  input[type="range"] { width: min(320px, 60vw); accent-color: var(--accent); }
+  input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
+  .verdict { font-size: 15px; flex-basis: 100%; }
+  .verdict strong { color: var(--accent); }
+  .verdict.bad strong { color: var(--danger); }
+
+  .meters { display: flex; flex-direction: column; gap: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+  .meter { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr) 150px; gap: 6px 18px; align-items: center; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+  .meter:last-child { border-bottom: 0; }
+  .meter .name { font-weight: 600; font-size: 15px; }
+  .meter .name span { display: block; font-weight: 400; font-size: 13px; color: var(--dim); }
+  .bar { position: relative; height: 12px; border-radius: 6px; background: var(--surface-2); overflow: hidden; }
+  .bar i { position: absolute; inset: 0 auto 0 0; border-radius: 6px; background: var(--accent); transition: width 0.25s ease; }
+  .bar i.warn { background: var(--warn); }
+  .bar i.over { background: var(--danger); }
+  .meter .nums { font-family: var(--mono); font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+  .meter .nums b { display: block; font-size: 15px; color: var(--text); }
+  .meter .nums .pct-over { color: var(--danger); }
+  .meter .cap { grid-column: 2 / 4; font-size: 13px; color: var(--dim); }
+
+  /* Tables ----------------------------------------------------------- */
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+  .table-wrap table { min-width: 720px; }
+  th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: 0; }
+  thead th { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); font-weight: 600; background: var(--surface-2); }
+  thead th:first-child { border-top-left-radius: 11px; }
+  thead th:last-child { border-top-right-radius: 11px; }
+  tbody th { font-weight: 600; width: 170px; }
+  td.num { font-family: var(--mono); font-size: 13px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .col-cf { background: var(--accent-soft); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--dim); }
+  .pill.good { background: var(--accent-soft); color: var(--accent); }
+  .pill.warn { color: var(--warn); }
+
+  .note {
+    border-left: 3px solid var(--warn); padding: 10px 16px; background: var(--surface);
+    border-radius: 0 8px 8px 0; font-size: 15px;
+  }
+  ul.plain { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; max-width: 72ch; }
+  footer { font-size: 13px; color: var(--dim); display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--border); padding-top: 20px; }
+
+  @media (max-width: 720px) {
+    header.hero { grid-template-columns: 1fr; }
+    .mini-board { display: none; }
+    .grid-2 { grid-template-columns: 1fr; }
+    .meter { grid-template-columns: 1fr auto; }
+    .meter .bar { grid-column: 1 / -1; grid-row: 2; }
+    .meter .cap { grid-column: 1 / -1; }
+    ol.steps li { grid-template-columns: 34px 1fr; }
+    ol.steps .cost { grid-column: 2; text-align: left; white-space: normal; }
+  }
+  @media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="hero">
+    <div class="hero-text">
+      <span class="eyebrow">Farboard · how it runs</span>
+      <h1>One Worker, one small database per game, and a free plan that cannot bill you</h1>
+      <p class="lede">
+        Farboard is a static page plus a tiny relay that passes encrypted moves between two players.
+        This page explains the pieces, what a single game costs against Cloudflare's free plan,
+        and what the same app would take on AWS or Vercel.
+      </p>
+      <div class="facts">
+        <span class="fact">Cloudflare Workers free plan</span>
+        <span class="fact">Durable Objects (SQLite)</span>
+        <span class="fact">End-to-end encrypted</span>
+        <span class="fact">Default cap: 100 new games a day</span>
+      </div>
+    </div>
+    <div class="mini-board" aria-hidden="true">
+      <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+    </div>
+  </header>
+
+  <!-- ============================================================ -->
+  <section id="architecture" aria-labelledby="arch-h">
+    <span class="eyebrow">Architecture</span>
+    <h2 id="arch-h">What talks to what</h2>
+    <p>
+      Everything lives in a single Cloudflare Worker named <code>farboard</code>. Files in
+      <code>public/</code> are served straight from Cloudflare's edge without running any code. Any
+      other request runs the Worker's own code, in <code>relay/src/index.js</code>. That code answers
+      the four <code>/v1/</code> routes and returns a 404 for everything else, such as a mistyped
+      address or a bot probing for common paths. Each game gets its own <em>Durable Object</em>: a small, single-threaded server with its
+      own database, which both players' WebSockets connect to.
+    </p>
+
+    <div class="diagram scroll">
+      <svg viewBox="0 0 920 470" role="img" aria-labelledby="diag-title diag-desc">
+        <title id="diag-title">Farboard architecture</title>
+        <desc id="diag-desc">Two players' browsers load the page from Cloudflare's static assets and open WebSockets to the Worker, which forwards each game to its own Room Durable Object. A single Budget Durable Object counts new games.</desc>
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path class="d-arrow" d="M0,0 L10,5 L0,10 z" />
+          </marker>
+          <marker id="arr-ws" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path class="d-arrow ws" d="M0,0 L10,5 L0,10 z" />
+          </marker>
+        </defs>
+
+        <!-- Players -->
+        <rect class="d-group" x="16" y="70" width="196" height="330" rx="12" />
+        <text class="d-label" x="30" y="92">PLAYERS</text>
+        <rect class="d-box" x="32" y="108" width="164" height="120" rx="10" />
+        <text class="d-title" x="46" y="136">Host's browser</text>
+        <text class="d-text" x="46" y="158">plays White or Black</text>
+        <text class="d-text" x="46" y="178">holds the game state</text>
+        <text class="d-text" x="46" y="198">and the AES-GCM key</text>
+        <rect class="d-box" x="32" y="248" width="164" height="132" rx="10" />
+        <text class="d-title" x="46" y="276">Guest's browser</text>
+        <text class="d-text" x="46" y="298">opened the invite link</text>
+        <text class="d-text" x="46" y="318">or QR code; the secret</text>
+        <text class="d-text" x="46" y="338">in its #fragment never</text>
+        <text class="d-text" x="46" y="358">reaches a server</text>
+
+        <!-- Cloudflare boundary -->
+        <rect class="d-cf" x="258" y="16" width="646" height="440" rx="16" />
+        <text class="d-label" x="276" y="40">CLOUDFLARE · ONE WORKER · FREE PLAN</text>
+
+        <!-- Static assets -->
+        <rect class="d-box" x="282" y="62" width="236" height="104" rx="10" />
+        <text class="d-title" x="298" y="90">Static assets</text>
+        <text class="d-code" x="298" y="112">public/ · HTML, CSS, JS</text>
+        <text class="d-text" x="298" y="134">Served at the edge.</text>
+        <text class="d-text" x="298" y="152">Free and not counted.</text>
+
+        <!-- Worker -->
+        <rect class="d-box" x="282" y="200" width="236" height="150" rx="10" />
+        <text class="d-title" x="298" y="228">Worker (the relay's door)</text>
+        <text class="d-code" x="298" y="250">relay/src/index.js</text>
+        <text class="d-code" x="298" y="276">GET  /v1/info</text>
+        <text class="d-code" x="298" y="294">GET  /v1/stats</text>
+        <text class="d-code" x="298" y="312">POST /v1/verify</text>
+        <text class="d-code" x="298" y="330">GET  /v1/rooms/:id  (WS)</text>
+
+        <!-- Room DOs (stacked) -->
+        <rect class="d-box" x="628" y="150" width="256" height="166" rx="10" />
+        <rect class="d-box" x="620" y="158" width="256" height="166" rx="10" />
+        <rect class="d-box key" x="612" y="166" width="256" height="166" rx="10" />
+        <text class="d-title" x="628" y="194">Room · one per game</text>
+        <text class="d-code" x="628" y="216">relay/src/room.js</text>
+        <text class="d-text" x="628" y="240">Durable Object with SQLite.</text>
+        <text class="d-text" x="628" y="260">Stores 2 seat-token hashes,</text>
+        <text class="d-text" x="628" y="280">today's message count and a</text>
+        <text class="d-text" x="628" y="300">7-day clean-up alarm.</text>
+        <text class="d-text" x="628" y="320">Hibernates between moves.</text>
+
+        <!-- Budget DO -->
+        <rect class="d-box" x="612" y="366" width="256" height="76" rx="10" />
+        <text class="d-title" x="628" y="392">Budget · one per relay</text>
+        <text class="d-code" x="628" y="412">relay/src/budget.js</text>
+        <text class="d-text" x="628" y="432">new games today, per network</text>
+
+        <!-- Arrows: players -> static -->
+        <path class="d-line" d="M212 118 L280 112" marker-end="url(#arr)" />
+        <text class="d-text" x="214" y="104">page</text>
+        <!-- players -> worker (WebSocket) -->
+        <path class="d-line ws" d="M212 262 L280 262" marker-end="url(#arr-ws)" />
+        <text class="d-label" x="216" y="252">WSS</text>
+        <!-- worker -> room -->
+        <path class="d-line ws" d="M518 250 L610 250" marker-end="url(#arr-ws)" />
+        <text class="d-label" x="526" y="240">sealed</text>
+        <text class="d-label" x="526" y="272">frames</text>
+        <!-- worker -> budget (stats) -->
+        <path class="d-line" d="M518 320 C 565 320, 565 400, 610 400" marker-end="url(#arr)" />
+        <text class="d-text" x="530" y="376">stats</text>
+        <!-- room -> budget (claim) -->
+        <path class="d-line" d="M740 332 L740 364" marker-end="url(#arr)" />
+        <text class="d-text" x="748" y="354">claim a new game</text>
+      </svg>
+    </div>
+    <p class="small dim">
+      The GitHub Pages copy (<code>emrahman.github.io/Farboard</code>) serves the same page but has no relay of its
+      own. <code>public/js/config.js</code> points it at the Cloudflare relay, which lists that address in
+      <code>ALLOWED_ORIGINS</code>.
+    </p>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3>Why one Durable Object per game</h3>
+        <p>
+          Both players' sockets land in the same object, so passing a move is a single
+          <code>peer.send()</code>. No message broker is needed, and no lookup of where the other player
+          is connected. The object handles one event at a time, which also settles races such as two people
+          opening the same invite at once.
+        </p>
+      </div>
+      <div class="card">
+        <h3>What the relay can and cannot see</h3>
+        <p>
+          The key comes from the invite secret, which never leaves the players' devices, so every frame
+          reaches the relay already encrypted with AES-GCM. The relay sees IP addresses and timing, and
+          stores only two hashes, a creation time and a message counter per game. The moves themselves
+          live on the two devices.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="game" aria-labelledby="game-h">
+    <span class="eyebrow">Life of a game</span>
+    <h2 id="game-h">What one game actually triggers</h2>
+    <p>
+      The counts assume a typical game: 40 moves each (80 plies) over about 25 minutes, both
+      tabs on screen, and one reconnect per player (a phone going to sleep, say). They are worked out
+      from the relay code, not measured from billing, so treat them as estimates.
+    </p>
+    <ol class="steps">
+      <li>
+        <div class="what">Both players open the page
+          <span>HTML, CSS and JS come from static assets. The home card asks <code>/v1/info</code> and <code>/v1/stats</code>.</span></div>
+        <div class="cost">4 Worker req · 2 DO req · 2 rows read</div>
+      </li>
+      <li>
+        <div class="what">Host creates the invite, guest joins
+          <span>Each opens a WebSocket. The Room reads its record, saves the new seat and sets its alarm. The host's join also asks Budget to count one new game.</span></div>
+        <div class="cost">2 Worker req · 3 DO req · ~5 rows read · 4 rows written</div>
+      </li>
+      <li>
+        <div class="what">80 moves, plus a few syncs and requests
+          <span>Each sealed frame is counted and passed to the other seat. Incoming WebSocket messages are billed at 20 to 1.</span></div>
+        <div class="cost">~90 messages · ~180 rows read · ~2 rows written</div>
+      </li>
+      <li>
+        <div class="what">Keep-alive pings
+          <span>Each visible tab pings every 50 seconds, so a 25-minute game adds about 30 per player. Hidden tabs do not ping.</span></div>
+        <div class="cost">~60 messages · ~60 rows read</div>
+      </li>
+      <li>
+        <div class="what">One reconnect each
+          <span>A new WebSocket, a fresh join and a sync to catch up on anything missed.</span></div>
+        <div class="cost">2 Worker req · 2 DO req · ~4 rows read</div>
+      </li>
+      <li>
+        <div class="what">Both players close the game
+          <span>Each leave updates the room's record. When both have gone, the alarm is set for a week later.</span></div>
+        <div class="cost">~2 rows read · 3 rows written</div>
+      </li>
+      <li>
+        <div class="what">A week later, the alarm fires
+          <span>The room deletes everything it stored. The game no longer exists anywhere except on the two devices.</span></div>
+        <div class="cost">1 DO req · ~3 rows written</div>
+      </li>
+    </ol>
+    <p class="small dim">
+      Rounded totals per game: <b>8 Worker requests</b>, <b>about 16 Durable Object requests</b> (the ~156 incoming
+      WebSocket messages count as about 8), <b>about 250 rows read</b> and <b>about 15 rows written</b>. The row-read count
+      is an upper bound: it assumes the room hibernates between every message and so reloads its message counter each time.
+    </p>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="terms" aria-labelledby="terms-h">
+    <span class="eyebrow">The units on the bill</span>
+    <h2 id="terms-h">Requests, GB-seconds, rows and storage</h2>
+    <p>
+      Cloudflare's free plan measures Farboard's relay in five units. Each resets at 00:00 UTC, except
+      storage, which is a running total. On the free plan, reaching a limit makes further operations of
+      that kind fail until the reset. Nothing is ever charged.
+    </p>
+    <div class="grid-2">
+      <div class="card">
+        <div class="term"><h3>Worker request</h3><span class="allow">100,000 / day</span></div>
+        <p>
+          One run of the Worker's code for an incoming HTTP request. A WebSocket counts once, when it
+          opens, however long it then stays open. Requests for the page's own files are served as static
+          assets and are not counted, but a request for a file that does not exist runs the Worker and
+          is counted, even though it only gets a 404.
+        </p>
+        <p class="example">Opening Farboard's home screen costs 2: <code>/v1/info</code> and <code>/v1/stats</code>. The HTML, CSS, JS and icons are free.</p>
+      </div>
+      <div class="card">
+        <div class="term"><h3>Durable Object request</h3><span class="allow">100,000 / day</span></div>
+        <p>
+          Each HTTP request, RPC call or alarm that reaches a Durable Object. Incoming WebSocket messages
+          count too, but at a 20:1 ratio: 20 messages cost 1 request.
+        </p>
+        <p class="example">A game's ~156 incoming messages (moves, pings, syncs) count as about 8 requests.</p>
+      </div>
+      <div class="card">
+        <div class="term"><h3>GB-second (duration)</h3><span class="allow">13,000 GB-s / day</span></div>
+        <p>
+          A <b>gigabyte-second</b>: memory multiplied by time, not network bandwidth (it is not a
+          gigabit). Every Durable Object is billed as if it used 128 MB, or 0.128 GB, for each second it
+          is awake. One object awake for one second costs 0.128 GB-s, so 13,000 GB-s is about 28 hours of
+          one object awake per day.
+        </p>
+        <p class="example">
+          A 25-minute game whose room stayed awake throughout would cost 1,500 s × 0.128 = <b>192 GB-s</b>,
+          so only about 67 such games would fit in a day. Farboard's rooms use the WebSocket Hibernation API,
+          which means only the milliseconds spent handling each message count, well under 1 GB-s a game.
+        </p>
+      </div>
+      <div class="card">
+        <div class="term"><h3>Hibernation</h3><span class="allow">not metered</span></div>
+        <p>
+          Between messages, Cloudflare can take a room out of memory while keeping both players'
+          WebSockets open on its side. The next message wakes the room. A room that is able to hibernate is
+          not billed for duration, even before it actually hibernates.
+        </p>
+        <p class="example">A game where both players have wandered off costs nothing at all while it waits.</p>
+      </div>
+      <div class="card">
+        <div class="term"><h3>SQL rows read / written</h3><span class="allow">5M read · 100k written / day</span></div>
+        <p>
+          Each Durable Object has a small SQLite database. Farboard uses the simple key-value calls on top of
+          it: each <code>get()</code> reads a row, and each <code>put()</code>, <code>delete()</code> or
+          <code>setAlarm()</code> writes one.
+        </p>
+        <p class="example">Joining a game reads the room's record (1 read) and saves the new seat (1 write). A move usually reads the message counter and the alarm time (2 reads) and writes nothing.</p>
+      </div>
+      <div class="card">
+        <div class="term"><h3>Stored data</h3><span class="allow">5 GB total</span></div>
+        <p>
+          The size of all Durable Object databases added together, at any moment. This is a running total
+          rather than a daily allowance, and data you delete stops counting.
+        </p>
+        <p class="example">A room keeps a few hundred bytes of data. It is deleted a week after its last message, so 100 games a day holds at most about 700 rooms. Even with generous database overhead that is under 20 MB.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="budget" aria-labelledby="budget-h">
+    <span class="eyebrow">Daily budget</span>
+    <h2 id="budget-h">How much of the free plan a day of games uses</h2>
+    <p>
+      Move the slider to change the number of games in a day. Each bar shows that day's use of one
+      allowance, using the per-game estimates above. Visitors who look at the home screen without playing
+      add 2 Worker requests, 1 Durable Object request and 1 row read each.
+    </p>
+
+    <div class="controls">
+      <label for="games">Games a day
+        <input type="range" id="games" min="0" max="1000" step="1" value="303" />
+      </label>
+      <output class="games-out" id="gamesOut" for="games">100</output>
+      <label for="hibernate"><input type="checkbox" id="hibernate" checked /> Rooms hibernate between messages (as built)</label>
+      <p class="verdict" id="verdict" aria-live="polite"></p>
+    </div>
+
+    <div class="meters" id="meters"></div>
+    <p class="small dim">
+      The relay's own cap (<code>DAILY_GAME_LIMIT</code>, default 100) stops new games long before any
+      allowance runs out. At 100 games a day the busiest allowance, Durable Object requests, sits near 2%.
+    </p>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="compare" aria-labelledby="compare-h">
+    <span class="eyebrow">Other platforms</span>
+    <h2 id="compare-h">The same app on AWS or Vercel</h2>
+    <p>
+      The page is static and would host for free almost anywhere. The part that changes is the relay:
+      something has to hold two WebSockets, pass frames between them, and remember seats and game
+      counts. On Cloudflare that is one object per game. Elsewhere, the same jobs are split across
+      several services.
+    </p>
+
+    <div class="table-wrap scroll">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col"></th>
+            <th scope="col" class="col-cf">Cloudflare (today)</th>
+            <th scope="col">AWS</th>
+            <th scope="col">Vercel</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Page</th>
+            <td class="col-cf">Worker static assets</td>
+            <td>S3 + CloudFront</td>
+            <td>Static deployment</td>
+          </tr>
+          <tr>
+            <th scope="row">WebSockets</th>
+            <td class="col-cf">Room Durable Object (hibernating)</td>
+            <td>API Gateway WebSocket API</td>
+            <td>Vercel Functions WebSockets (public beta since June 2026)</td>
+          </tr>
+          <tr>
+            <th scope="row">Passing a move to the other player</th>
+            <td class="col-cf">Same object, one <code>send()</code></td>
+            <td>A Lambda per message looks up the peer's connection in DynamoDB, then calls <code>PostToConnection</code></td>
+            <td>The two sockets may sit on different instances, so frames go through Redis pub/sub (Upstash)</td>
+          </tr>
+          <tr>
+            <th scope="row">Seats, counters, clean-up</th>
+            <td class="col-cf">Object's SQLite + alarm</td>
+            <td>DynamoDB conditional writes, TTL for expiry</td>
+            <td>Redis keys with expiry</td>
+          </tr>
+          <tr>
+            <th scope="row">Connection limits</th>
+            <td class="col-cf">None that affect a game</td>
+            <td>10-minute idle timeout, 2-hour maximum</td>
+            <td>5 minutes per connection on Hobby (300 s max duration), then reconnect</td>
+          </tr>
+          <tr>
+            <th scope="row">Free allowance that matters</th>
+            <td class="col-cf">100k DO requests/day; hibernation makes idle games free</td>
+            <td>Lambda 1M requests/month and DynamoDB 25 GB always free. API Gateway's 1M messages/month is a 12-month offer; accounts opened since July 2025 get credits instead</td>
+            <td>Hobby: 1M invocations, 4 h Active CPU, 360 GB-hours memory per month. Upstash free: 500k commands/month</td>
+          </tr>
+          <tr>
+            <th scope="row">Rough cost at 100 games/day</th>
+            <td class="col-cf"><span class="pill good">$0</span></td>
+            <td><span class="pill">≈ $1 a month</span> ~950k API Gateway messages at $1/M; connection-minutes, Lambda and DynamoDB add cents or stay free</td>
+            <td><span class="pill warn">$0–2 a month</span> Upstash's free tier covers ~40 games a day; above that about $1.40/month. Memory held open by sockets may outgrow Hobby's 360 GB-hours</td>
+          </tr>
+          <tr>
+            <th scope="row">When usage spikes</th>
+            <td class="col-cf">Free plan fails closed at the limit; online play pauses until 00:00 UTC; never billed</td>
+            <td>Keeps serving and bills per use; AWS Budgets can alert but do not stop spending</td>
+            <td>Hobby stops serving past its included usage until the next cycle; Pro ($20/month) bills overage</td>
+          </tr>
+          <tr>
+            <th scope="row">Terms</th>
+            <td class="col-cf">Any use</td>
+            <td>Any use</td>
+            <td>Hobby is for personal, non-commercial use only</td>
+          </tr>
+          <tr>
+            <th scope="row">Porting effort</th>
+            <td class="col-cf">—</td>
+            <td>Large: rewrite <code>room.js</code> as three Lambda handlers with DynamoDB, plus infrastructure as code and IAM</td>
+            <td>Medium: a Node WebSocket server plus Redis for seats and relaying; handle a reconnect every 5 minutes</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3>How the AWS figure is reached</h3>
+        <p>
+          API Gateway meters messages in both directions: about 156 in and 160 out per game, so roughly
+          316 × 3,000 games a month ≈ 950k messages, or about $0.95. Two players for 25 minutes is 50
+          connection-minutes a game, about $0.04 a month at $0.25 per million. The ~470k Lambda invocations
+          and their DynamoDB lookups fit in the always-free tiers.
+        </p>
+      </div>
+      <div class="card">
+        <h3>How the Vercel figure is reached</h3>
+        <p>
+          Relaying a frame through Redis takes about 2–3 commands (publish, counters), so about 400
+          commands a game. 500k free commands a month is about 1,250 games, or 40 a day. The remaining
+          ~700k commands at $0.20 per 100k come to about $1.40. Function memory is billed while an instance
+          holds open sockets, which is hard to predict with Fluid compute sharing instances.
+        </p>
+      </div>
+    </div>
+
+    <p class="note">
+      <b>The short version:</b> AWS and Vercel would each run Farboard for about a dollar or two a month.
+      Cloudflare's advantages are that the design is simpler (one object per game instead of a
+      function, a database and a pub/sub service), idle games cost nothing, and the free plan stops
+      at its limits instead of sending a bill.
+    </p>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="check" aria-labelledby="check-h">
+    <span class="eyebrow">Checking the real numbers</span>
+    <h2 id="check-h">Where to see actual usage</h2>
+    <ul class="plain">
+      <li><b>Cloudflare dashboard → Workers &amp; Pages → farboard → Metrics</b>: Worker requests per day, with static assets shown separately.</li>
+      <li><b>Cloudflare dashboard → Durable Objects</b>: requests, duration (GB-s), rows read and written, and stored data for <code>Room</code> and <code>Budget</code>.</li>
+      <li><b><code>GET /v1/stats</code></b> on the live site: games started today, the cap and when it resets.</li>
+      <li><b>Workers Logs</b>: one <code>game-created</code> or <code>game-refused</code> line per new game.</li>
+    </ul>
+    <p class="small dim">
+      If the real figures differ from the estimates here, the per-game constants live at the top of this
+      page's script and are easy to adjust.
+    </p>
+  </section>
+
+  <footer>
+    <p>
+      Prices and allowances checked on 26 September 2026 from
+      <a href="https://developers.cloudflare.com/workers/platform/pricing/">Workers pricing</a>,
+      <a href="https://developers.cloudflare.com/durable-objects/platform/pricing/">Durable Objects pricing</a>,
+      <a href="https://aws.amazon.com/api-gateway/pricing/">API Gateway pricing</a>,
+      <a href="https://vercel.com/pricing">Vercel pricing</a>,
+      <a href="https://vercel.com/docs/functions/websockets">Vercel WebSockets</a>,
+      <a href="https://vercel.com/docs/functions/limitations">Vercel Functions limits</a> and
+      <a href="https://upstash.com/pricing/redis">Upstash Redis pricing</a>.
+    </p>
+    <p>Farboard's own numbers are estimates from <code>relay/src/room.js</code>, <code>relay/src/budget.js</code>, <code>relay/src/index.js</code> and <code>public/js/relayclient.js</code>.</p>
+  </footer>
+</div>
+
+<script>
+  (function () {
+    'use strict';
+
+    // Per typical game (80 plies, ~25 minutes, one reconnect each); see "Life of a game".
+    var GAME_MINUTES = 25;
+    var PER_GAME = {
+      worker: 8,
+      doRequests: 16,
+      gbsHibernating: 0.3,
+      gbsAwake: GAME_MINUTES * 60 * 0.128, // 192 GB-s: the room awake for the whole game
+      rowsRead: 250,
+      rowsWritten: 15,
+      storageKb: 20 // generous: data plus SQLite overhead, kept for up to 7 days
+    };
+    var ROOM_DAYS = 7;
+
+    var METRICS = [
+      { key: 'worker', name: 'Worker requests', sub: 'page files are free', free: 100000, unit: '' },
+      { key: 'doRequests', name: 'Durable Object requests', sub: 'WebSocket messages at 20:1', free: 100000, unit: '' },
+      { key: 'gbs', name: 'Duration', sub: 'GB-seconds', free: 13000, unit: ' GB-s' },
+      { key: 'rowsRead', name: 'SQL rows read', sub: 'upper-bound estimate', free: 5000000, unit: '' },
+      { key: 'rowsWritten', name: 'SQL rows written', sub: '', free: 100000, unit: '' },
+      { key: 'storage', name: 'Stored data', sub: 'running total, not daily', free: 5 * 1000 * 1000, unit: ' KB' }
+    ];
+
+    var slider = document.getElementById('games');
+    var out = document.getElementById('gamesOut');
+    var hib = document.getElementById('hibernate');
+    var metersEl = document.getElementById('meters');
+    var verdict = document.getElementById('verdict');
+
+    function gamesFromSlider(v) {
+      var raw = 10 * Math.pow(2000, v / 1000); // 10 to 20,000, logarithmic
+      if (raw < 100) return Math.round(raw);
+      if (raw < 1000) return Math.round(raw / 10) * 10;
+      return Math.round(raw / 100) * 100;
+    }
+
+    function perGame(key) {
+      if (key === 'gbs') return hib.checked ? PER_GAME.gbsHibernating : PER_GAME.gbsAwake;
+      if (key === 'storage') return PER_GAME.storageKb * ROOM_DAYS;
+      return PER_GAME[key];
+    }
+
+    function fmt(n) {
+      if (n >= 100) return Math.round(n).toLocaleString('en-GB');
+      if (n >= 10) return n.toFixed(0);
+      return n.toFixed(1).replace(/\.0$/, '');
+    }
+
+    function fmtStorage(kb) {
+      if (kb >= 1000 * 1000) return fmt(kb / 1000 / 1000) + ' GB';
+      if (kb >= 1000) return fmt(kb / 1000) + ' MB';
+      return fmt(kb) + ' KB';
+    }
+
+    function build() {
+      METRICS.forEach(function (m) {
+        var row = document.createElement('div');
+        row.className = 'meter';
+        row.innerHTML =
+          '<div class="name">' + m.name + (m.sub ? '<span>' + m.sub + '</span>' : '') + '</div>' +
+          '<div class="bar" role="img"><i></i></div>' +
+          '<div class="nums"><b></b><span></span></div>' +
+          '<div class="cap"></div>';
+        m.el = row;
+        metersEl.appendChild(row);
+      });
+    }
+
+    function render() {
+      var games = gamesFromSlider(Number(slider.value));
+      out.textContent = games.toLocaleString('en-GB');
+      var first = null;
+
+      METRICS.forEach(function (m) {
+        var per = perGame(m.key);
+        var used = per * games;
+        var pct = (used / m.free) * 100;
+        var capacity = Math.floor(m.free / per);
+        if (!first || capacity < first.capacity) first = { name: m.name, capacity: capacity };
+
+        var bar = m.el.querySelector('.bar i');
+        bar.style.width = Math.min(100, Math.max(pct, 0.4)) + '%';
+        bar.className = pct >= 100 ? 'over' : pct >= 60 ? 'warn' : '';
+        m.el.querySelector('.bar').setAttribute('aria-label', m.name + ': ' + pct.toFixed(1) + '% of the free allowance');
+
+        var usedText = m.key === 'storage' ? fmtStorage(used) : fmt(used) + m.unit;
+        var freeText = m.key === 'storage' ? '5 GB' : m.free.toLocaleString('en-GB') + m.unit;
+        m.el.querySelector('.nums b').textContent = usedText;
+        var pctEl = m.el.querySelector('.nums span');
+        pctEl.textContent = (pct < 0.1 ? '<0.1' : pct < 10 ? pct.toFixed(1) : Math.round(pct)) + '% of ' + freeText;
+        pctEl.className = pct >= 100 ? 'pct-over' : '';
+
+        var perText = m.key === 'storage'
+          ? fmtStorage(PER_GAME.storageKb) + ' per game, kept ' + ROOM_DAYS + ' days'
+          : fmt(per) + m.unit + ' per game';
+        m.el.querySelector('.cap').textContent =
+          perText + ' · runs out at about ' + capacity.toLocaleString('en-GB') + ' games a day';
+      });
+
+      var over = games > first.capacity;
+      verdict.className = 'verdict' + (over ? ' bad' : '');
+      verdict.innerHTML = over
+        ? 'At ' + games.toLocaleString('en-GB') + ' games a day, <strong>' + first.name +
+          ' run out</strong> after about ' + first.capacity.toLocaleString('en-GB') + ' games; online play would pause until 00:00 UTC.'
+        : 'The first allowance to run out would be <strong>' + first.name + '</strong>, at about ' +
+          first.capacity.toLocaleString('en-GB') + ' games a day.';
+    }
+
+    build();
+    slider.addEventListener('input', render);
+    hib.addEventListener('change', render);
+    render();
+  })();
+</script>
+</body>
+</html>
