@@ -1,6 +1,6 @@
 # Farboard
 
-Play a friend across the table or across the world.
+Play chess with a friend, near or far.
 
 **[Open Farboard](https://farboard.ehsanr-web.workers.dev/)**
 (also at [emrahman.github.io/Farboard](https://emrahman.github.io/Farboard/))
