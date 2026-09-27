@@ -123,6 +123,7 @@ h2 {
 /* ------------------------------------------------------------ player strip */
 
 .player-strip {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -215,20 +216,24 @@ body:not(.in-game) .game-only {
   display: none;
 }
 
-/* Game events, over the foot of the board. */
+/* Game events, over the player's own strip so the board stays clear. Pinned
+   to the strip's top, so a message that wraps grows down, away from the board. */
 .board-toast {
   position: absolute;
-  left: 50%;
-  bottom: 12px;
-  transform: translateX(-50%);
-  z-index: 6;
-  width: max-content;
-  max-width: calc(100% - 24px);
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 100%;
   margin: 0;
-  padding: 8px 14px;
-  border-radius: 999px;
-  background: rgba(20, 19, 16, 0.9);
-  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: var(--radius);
+  background: var(--panel-raised);
+  border: 1px solid var(--accent);
   color: var(--text);
   font-size: 14px;
   text-align: center;

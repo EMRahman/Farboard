@@ -560,7 +560,7 @@
 
   /* ------------------------------------------------------------ feedback */
 
-  /* Game events, shown over the foot of the board where the player is looking. */
+  /* Game events, shown over the player's own strip just under the board. */
   var flashTimer = null;
   function flash(message) {
     el.toast.textContent = message;
