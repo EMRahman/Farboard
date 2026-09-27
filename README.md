@@ -108,6 +108,12 @@ compares the four designs considered for the relay (WebRTC peer-to-peer, a VPS
 relay, AWS serverless and Cloudflare Durable Objects) and why Cloudflare won.
 It is served from [`public/docs/alternatives.html`](public/docs/alternatives.html).
 
+**[Economics](https://farboard.ehsanr-web.workers.dev/docs/economics)**
+explains why the relay can be free (Cloudflare's scale and its packaging of old
+ideas like the actor model), and how AI helped find, build and explain the
+design without leaving cognitive debt. It is served from
+[`public/docs/economics.html`](public/docs/economics.html).
+
 ## Publishing
 
 The app is published in two places:
@@ -175,6 +181,7 @@ public/                     the website, exactly as served
   docs/architecture.html    what online play is made of, why, and what it costs
   docs/implementation.html  how online play is coded, message by message
   docs/alternatives.html    the designs considered for the relay, and why this one
+  docs/economics.html       why the relay can be free, and how AI helped choose it
   docs/multiplayer.html     redirect from the guide's old address
 relay/                      the relay: the Worker's code and its Durable Objects
 wrangler.jsonc              the Cloudflare Worker: the site plus the relay
