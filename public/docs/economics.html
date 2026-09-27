@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Farboard Economics</title>
+<meta name="description" content="Why Farboard's relay is free: Cloudflare's scale and packaging of old ideas, the understanding hurdle, and how AI helped find, build and explain the design without leaving cognitive debt." />
+<style>
+  :root {
+    --bg: #eef0e6;
+    --surface: #ffffff;
+    --surface-2: #e3e7d8;
+    --border: #cbd0bd;
+    --text: #22241f;
+    --dim: #5b6054;
+    --accent: #4b7a1f;
+    --accent-ink: #ffffff;
+    --accent-soft: #dde8cc;
+    --warn: #a86400;
+    --danger: #b3402a;
+    --sq-light: #eeeed2;
+    --sq-dark: #769656;
+    --diagram-cf: rgba(75, 122, 31, 0.07);
+    --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #302e2b;
+      --surface: #262421;
+      --surface-2: #3a3835;
+      --border: #4a4843;
+      --text: #f1f0ee;
+      --dim: #aaa59c;
+      --accent: #81b64c;
+      --accent-ink: #1b2a10;
+      --accent-soft: rgba(129, 182, 76, 0.16);
+      --warn: #e0a03c;
+      --danger: #e2735b;
+      --diagram-cf: rgba(129, 182, 76, 0.07);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #302e2b;
+    --surface: #262421;
+    --surface-2: #3a3835;
+    --border: #4a4843;
+    --text: #f1f0ee;
+    --dim: #aaa59c;
+    --accent: #81b64c;
+    --accent-ink: #1b2a10;
+    --accent-soft: rgba(129, 182, 76, 0.16);
+    --warn: #e0a03c;
+    --danger: #e2735b;
+    --diagram-cf: rgba(129, 182, 76, 0.07);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.55 var(--sans);
+    padding: 0 16px;
+    -webkit-text-size-adjust: 100%;
+  }
+  .page {
+    max-width: 960px;
+    margin: 0 auto;
+    padding-block: 40px 64px;
+    display: flex;
+    flex-direction: column;
+    gap: 56px;
+  }
+  h1, h2, h3 { margin: 0; line-height: 1.2; text-wrap: balance; font-weight: 650; }
+  h1 { font-size: clamp(30px, 5vw, 42px); letter-spacing: -0.5px; }
+  h2 { font-size: 24px; letter-spacing: -0.2px; }
+  h3 { font-size: 17px; }
+  p { margin: 0; max-width: 68ch; }
+  a { color: var(--accent); }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  section { display: flex; flex-direction: column; gap: 18px; }
+  .eyebrow {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  a.eyebrow { text-decoration: none; align-self: flex-start; }
+  a.eyebrow:hover { text-decoration: underline; }
+  .lede { font-size: 18px; color: var(--dim); max-width: 62ch; }
+  .dim { color: var(--dim); }
+  .small { font-size: 14px; }
+
+  /* Hero ------------------------------------------------------------- */
+  header.hero { display: grid; grid-template-columns: 1fr auto; gap: 28px; align-items: end; }
+  .hero-text { display: flex; flex-direction: column; gap: 14px; }
+  .mini-board {
+    width: 112px; height: 112px;
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    border-radius: 6px; overflow: hidden;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  }
+  .mini-board span { background: var(--sq-light); }
+  .mini-board span:nth-child(8n + 2), .mini-board span:nth-child(8n + 4),
+  .mini-board span:nth-child(8n + 5), .mini-board span:nth-child(8n + 7) { background: var(--sq-dark); }
+  .facts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .fact {
+    font-size: 13px; padding: 5px 10px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--text);
+  }
+  nav.toc { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 14px; }
+
+  /* Diagram ---------------------------------------------------------- */
+  .scroll { overflow-x: auto; }
+  .diagram { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+  .diagram svg { display: block; width: 100%; min-width: 680px; height: auto; }
+  .d-box { fill: var(--surface-2); stroke: var(--border); stroke-width: 1.2; }
+  .d-box.key { fill: var(--accent-soft); stroke: var(--accent); }
+  .d-box.fallback { stroke: var(--warn); stroke-dasharray: 5 4; }
+  .d-cf { fill: var(--diagram-cf); stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 6 5; }
+  .d-group { fill: none; stroke: var(--border); stroke-width: 1.2; stroke-dasharray: 3 4; }
+  .d-rule { stroke: var(--border); stroke-width: 1; }
+  .d-title { fill: var(--text); font: 600 15px var(--sans); }
+  .d-name { fill: var(--text); font: 600 13px var(--sans); }
+  .d-text { fill: var(--dim); font: 12.5px var(--sans); }
+  .d-label { fill: var(--accent); font: 600 12px var(--sans); }
+  .d-warn { fill: var(--warn); font: 600 12px var(--sans); }
+  .d-line { stroke: var(--dim); stroke-width: 1.5; fill: none; }
+  .d-line.ws { stroke: var(--accent); stroke-width: 2.2; }
+  .d-line.setup { stroke-dasharray: 4 4; }
+  .d-line.fallback { stroke: var(--warn); stroke-dasharray: 5 4; }
+  .d-arrow { fill: var(--dim); }
+  .d-arrow.ws { fill: var(--accent); }
+  .d-arrow.warn { fill: var(--warn); }
+
+  /* Cards ------------------------------------------------------------ */
+  .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px 20px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .card.chosen { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .card p { font-size: 15px; }
+  .card .verdict { font-size: 14px; border-top: 1px solid var(--border); padding-top: 8px; margin-top: auto; }
+  .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+  /* Tables ----------------------------------------------------------- */
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+  .table-wrap table { min-width: 820px; }
+  th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--border); }
+  tr:last-child td, tr:last-child th { border-bottom: 0; }
+  thead th { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); font-weight: 600; background: var(--surface-2); }
+  thead th:first-child { border-top-left-radius: 11px; }
+  thead th:last-child { border-top-right-radius: 11px; }
+  tbody th { font-weight: 600; width: 170px; }
+  .col-cf { background: var(--accent-soft); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--dim); }
+  .pill.good { background: var(--accent-soft); color: var(--accent); }
+  .pill.warn { color: var(--warn); }
+  .pill.bad { color: var(--danger); }
+
+  .note {
+    border-left: 3px solid var(--accent); padding: 12px 16px; background: var(--surface);
+    border-radius: 0 8px 8px 0; font-size: 15px; display: flex; flex-direction: column; gap: 10px;
+  }
+  ul.plain, ol.plain { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; max-width: 72ch; }
+  blockquote { margin: 0; padding: 12px 16px; border-left: 3px solid var(--border); color: var(--dim); font-size: 15px; max-width: 68ch; }
+  footer { font-size: 13px; color: var(--dim); display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--border); padding-top: 20px; }
+
+  @media (max-width: 720px) {
+    header.hero { grid-template-columns: 1fr; }
+    .mini-board { display: none; }
+    .grid-2 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="hero">
+    <div class="hero-text">
+      <a class="eyebrow" href="../">← Farboard</a>
+      <h1>Old ideas, new economics</h1>
+      <p class="lede">
+        Farboard's online play runs for free on Cloudflare, using ideas that are decades old. Cloudflare's
+        scale made that possible, but understanding it was still the hurdle. AI got me over it: it found the
+        option, built it with me, and explained it until I understood it.
+      </p>
+      <div class="facts">
+        <span class="fact">$0 a month</span>
+        <span class="fact">100 games a day ≈ 2% of the free allowance</span>
+        <span class="fact">Never billed</span>
+      </div>
+      <nav class="toc" aria-label="On this page">
+        <a href="#chain">Four steps to free</a>
+        <a href="#scale">Scale</a>
+        <a href="#packaging">Packaging</a>
+        <a href="#hurdle">The hurdle</a>
+        <a href="#discovery">Discovery</a>
+        <a href="#understanding">Understanding</a>
+        <a href="#conversation">The wider conversation</a>
+        <a href="#caveats">Caveats</a>
+      </nav>
+    </div>
+    <div class="mini-board" aria-hidden="true">
+      <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+    </div>
+  </header>
+
+  <!-- ============================================================ -->
+  <section id="chain" aria-labelledby="chain-h">
+    <span class="eyebrow">The short version</span>
+    <h2 id="chain-h">Four steps took a familiar design to free</h2>
+    <p>
+      The design isn't new: one small server per game, holding both players' connections. Cloudflare made
+      it free to run. AI made it possible for me to adopt it.
+    </p>
+
+    <div class="diagram scroll">
+      <svg viewBox="0 0 920 236" role="img" aria-labelledby="chain-title chain-desc">
+        <title id="chain-title">Four steps from an old idea to a free relay</title>
+        <desc id="chain-desc">Cloudflare supplied scale and packaging: a global network where isolates pack thousands of programs per machine, and Durable Objects, one actor per game that sleeps between moves. Understanding was the hurdle between packaging and use. AI supplied discovery, by naming the option alongside VPS, AWS and WebRTC, and understanding, by building it and explaining it back.</desc>
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path class="d-arrow ws" d="M0,0 L10,5 L0,10 z" />
+          </marker>
+        </defs>
+
+        <rect class="d-cf" x="16" y="20" width="432" height="176" rx="14" />
+        <text class="d-label" x="32" y="42">CLOUDFLARE MADE IT FREE</text>
+        <rect class="d-group" x="472" y="20" width="432" height="176" rx="14" />
+        <text class="d-label" x="488" y="42">AI MADE IT REACHABLE</text>
+
+        <rect class="d-box" x="32" y="58" width="180" height="120" rx="10" />
+        <text class="d-title" x="46" y="86">1 · Scale</text>
+        <text class="d-text" x="46" y="112">network built for CDN</text>
+        <text class="d-text" x="46" y="132">and DDoS; isolates pack</text>
+        <text class="d-text" x="46" y="152">thousands per machine</text>
+
+        <rect class="d-box" x="252" y="58" width="180" height="120" rx="10" />
+        <text class="d-title" x="266" y="86">2 · Packaging</text>
+        <text class="d-text" x="266" y="112">Durable Objects: one</text>
+        <text class="d-text" x="266" y="132">actor per game, asleep</text>
+        <text class="d-text" x="266" y="152">between moves</text>
+
+        <rect class="d-box" x="488" y="58" width="180" height="120" rx="10" />
+        <text class="d-title" x="502" y="86">3 · Discovery</text>
+        <text class="d-text" x="502" y="112">AI named the option</text>
+        <text class="d-text" x="502" y="132">next to VPS, AWS</text>
+        <text class="d-text" x="502" y="152">and WebRTC</text>
+
+        <rect class="d-box key" x="708" y="58" width="180" height="120" rx="10" />
+        <text class="d-title" x="722" y="86">4 · Understanding</text>
+        <text class="d-text" x="722" y="112">AI built it, then</text>
+        <text class="d-text" x="722" y="132">explained it back, so</text>
+        <text class="d-text" x="722" y="152">no cognitive debt</text>
+
+        <path class="d-line ws" d="M212 118 L250 118" marker-end="url(#arr)" />
+        <path class="d-line ws" d="M432 118 L486 118" marker-end="url(#arr)" />
+        <path class="d-line ws" d="M668 118 L706 118" marker-end="url(#arr)" />
+        <line class="d-line fallback" x1="460" y1="30" x2="460" y2="206" />
+        <text class="d-warn" x="460" y="224" text-anchor="middle">the hurdle: understanding it</text>
+      </svg>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="scale" aria-labelledby="scale-h">
+    <span class="eyebrow">1 · Scale</span>
+    <h2 id="scale-h">Cloudflare can give this away because of how big it already is</h2>
+    <p>
+      Cloudflare already runs a global network for its CDN and DDoS protection. Workers run on capacity it
+      had built anyway, so an extra small program costs it very little. Three design choices keep that cost
+      tiny:
+    </p>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Isolates, not containers</h3>
+        <p>
+          Workers run in V8 isolates, the same sandbox a browser gives each tab. One starts in milliseconds
+          and uses little memory, so a single machine can hold thousands of them. There's no virtual machine
+          per customer to keep running.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Hibernation</h3>
+        <p>
+          A game's Room sleeps between moves while its WebSockets stay open at the edge. A chess game spends
+          almost all of its time waiting for someone to think, so it costs almost nothing.
+        </p>
+      </div>
+      <div class="card">
+        <h3>A free plan that stops, not bills</h3>
+        <p>
+          At its daily limit, the free plan pauses instead of charging. For Farboard, 100 games a day uses
+          about 2% of the allowance (<a href="architecture.html#budget">see the daily budget</a>).
+        </p>
+      </div>
+      <div class="card">
+        <h3>The free tier works like a funnel</h3>
+        <p>
+          Developers who start building on Cloudflare for free may later bring it paid work that would
+          otherwise go to AWS. A generous free tier is how a smaller cloud competes with a bigger one.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="packaging" aria-labelledby="packaging-h">
+    <span class="eyebrow">2 · Packaging</span>
+    <h2 id="packaging-h">Old ideas, packaged as one building block</h2>
+    <p>
+      None of the ideas behind a Durable Object are new. What Cloudflare did was package them together
+      and make them cheap to run.
+    </p>
+    <ul class="plain">
+      <li><strong>The actor model (1970s) and Erlang (1980s).</strong> Each piece of state lives in its own
+        small process, and only that process can change it. One Room per game is exactly this, so there are
+        no locks or database race conditions.</li>
+      <li><strong>The stateful game server.</strong> It's what I'd have written on a VPS: one process holds
+        both connections and forwards moves. A Room is that process, one per game.</li>
+      <li><strong>Edge computing.</strong> CDNs have run on servers near users for decades, mostly to cache
+        files. Workers let you run any code there.</li>
+    </ul>
+    <p>
+      AWS built serverless by combining separate services, each billed on its own. Cloudflare built a
+      smaller set of building blocks around one cheap unit, the isolate, and gave state a home right next
+      to it. On AWS the same relay needs API Gateway, Lambda, DynamoDB and IAM
+      (<a href="alternatives.html">compare the designs</a>).
+    </p>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="hurdle" aria-labelledby="hurdle-h">
+    <span class="eyebrow">The hurdle</span>
+    <h2 id="hurdle-h">Cheap to run, but not cheap to understand</h2>
+    <p>
+      A free, well-packaged platform still costs something: the time to learn it. Durable Objects are a
+      different mental model from a server you run yourself. To trust one with real players, I'd have had
+      to read the docs, build a prototype, test how it behaves and design around what I found.
+    </p>
+    <p>
+      I've run VPS servers for 20 years. For a side project, that learning cost would have been bigger than
+      anything the free tier could save, so the sensible choice was the server I already knew. The economics
+      of the platform had changed, but the economics of learning it hadn't.
+    </p>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="discovery" aria-labelledby="discovery-h">
+    <span class="eyebrow">3 · Discovery</span>
+    <h2 id="discovery-h">AI showed me the option existed</h2>
+    <p>
+      I didn't know this design existed until an AI coding assistant suggested it, together with a VPS
+      relay, AWS serverless and WebRTC peer-to-peer. Twenty years of good habits meant I'd never gone looking.
+      You can't weigh an option you don't know about.
+    </p>
+    <p>
+      The AI also said what each option would cost to run and where it would struggle. For example, WebRTC
+      can't always connect phones directly on mobile and office networks, so it still needs a relay.
+      <a href="alternatives.html">Design alternatives</a> compares all four.
+    </p>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="understanding" aria-labelledby="understanding-h">
+    <span class="eyebrow">4 · Understanding</span>
+    <h2 id="understanding-h">AI built it, then explained it, to avoid cognitive debt</h2>
+    <p>
+      The AI built a working version quickly. That made trying the unfamiliar design cheap: I compared real,
+      working code instead of guessing.
+    </p>
+    <p>
+      Speed brings a risk. <strong>Cognitive debt</strong>, also called comprehension debt, is what builds up
+      when code ships that nobody understands. Like technical debt, you pay it back later, usually during an
+      outage, when no one can say how the system works
+      (<a href="https://margaretstorey.com/blog/2026/02/09/cognitive-debt/">Margaret-Anne Storey</a>,
+      <a href="https://medium.com/@addyosmani/comprehension-debt-the-hidden-cost-of-ai-generated-code-285a25dac57e">Addy Osmani</a>).
+    </p>
+    <p>So the other half of the work was paying that debt down as it was taken on:</p>
+    <ul class="plain">
+      <li><strong>Explained back to me.</strong> I learned Durable Objects well enough to judge for myself
+        that this design is simpler. I'm not taking the AI's word for it.</li>
+      <li><strong>Written down.</strong> The explanations became this site's guides:
+        <a href="architecture.html">Architecture</a> (what it's made of and why),
+        <a href="implementation.html">Implementation</a> (how it's coded, message by message) and
+        <a href="alternatives.html">Design alternatives</a> (what else was considered).</li>
+      <li><strong>Kept small.</strong> The whole relay is one Worker and two classes, so it's still small
+        enough to hold in one person's head.</li>
+    </ul>
+    <p class="note">
+      <span>
+        <b>What AI did:</b> it lowered the cost of exploring, building and learning. <b>What it didn't do:</b>
+        make the choice. I chose Cloudflare after comparing working versions and understanding them.
+      </span>
+    </p>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="conversation" aria-labelledby="conversation-h">
+    <span class="eyebrow">The wider conversation</span>
+    <h2 id="conversation-h">Where this fits in how people talk about AI</h2>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Cheaper code means more gets built</h3>
+        <p>
+          The Jevons paradox: when something gets cheaper, people use more of it. Applied to AI, ideas that
+          weren't worth building before now clear the bar
+          (<a href="https://www.jimmont.com/code-jevons-paradox-intellectual-work">Jim Montgomery</a>).
+          Here, it wasn't a feature that became worth building. It was a whole architecture that became
+          worth trying.
+        </p>
+      </div>
+      <div class="card">
+        <h3>"Choose boring technology," revisited</h3>
+        <p>
+          The classic advice is to stick with proven tools, and some argue AI makes that more important,
+          because you can't check an AI on technology you don't know
+          (<a href="https://www.brethorsting.com/blog/2025/07/choose-boring-technology,-revisited/">Aaron Brethorst</a>;
+          compare <a href="https://simonwillison.net/2026/Mar/9/not-so-boring/">Simon Willison</a>). My
+          answer is in between: new technology is fine if the AI teaches it to you well enough to check.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Home-cooked software</h3>
+        <p>
+          Small apps built for friends and communities, not for scale
+          (<a href="https://maggieappleton.com/home-cooked-software">Maggie Appleton</a>). Free tiers are
+          what keep them running for years, and Farboard's <em>Deploy to Cloudflare</em> button lets anyone
+          run their own copy at no cost.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Durable Objects for AI agents</h3>
+        <p>
+          Cloudflare builds its <a href="https://github.com/cloudflare/agents">Agents SDK</a> on Durable
+          Objects: one actor per agent, using no compute while it's asleep. It's the same property that makes
+          one Room per chess game free, which suggests the design will be supported for a long time.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="caveats" aria-labelledby="caveats-h">
+    <span class="eyebrow">Caveats</span>
+    <h2 id="caveats-h">What I'm keeping an eye on</h2>
+    <ul class="plain">
+      <li><strong>Building it isn't running it.</strong> I haven't had a production incident on Cloudflare yet,
+        so I'm practising now, while nothing is broken: reading Workers Logs, checking a Room's state and
+        the request counts, and rolling back a deploy.</li>
+      <li><strong>Lock-in is real but small.</strong> Durable Objects exist only on Cloudflare. Leaving would
+        mean redesigning the relay (<code>relay/src/room.js</code>), and nothing else. The VPS design is still a
+        working way out.</li>
+      <li><strong>Free tiers can change.</strong> If the free plan changed, the fallback is the same small
+        design on a paid plan or on a VPS.</li>
+    </ul>
+  </section>
+
+  <footer>
+    <p>
+      Farboard's figures are from <a href="architecture.html">Architecture</a> and
+      <code>relay/README.md</code>. Outside articles were found by web search and are summarised from it.
+    </p>
+    <p>
+      <a href="alternatives.html">Design alternatives</a> ·
+      <a href="architecture.html">Architecture</a> ·
+      <a href="implementation.html">Implementation</a>
+    </p>
+  </footer>
+</div>
+</body>
+</html>
