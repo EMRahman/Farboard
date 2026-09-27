@@ -95,6 +95,12 @@ what one game costs against the free plan (requests, GB-seconds, SQL rows,
 storage), and how the same app would look on AWS or Vercel. It is served with
 the site from [`public/docs/architecture.html`](public/docs/architecture.html).
 
+**[How online play works](https://farboard.ehsanr-web.workers.dev/docs/multiplayer)**
+explains, for programmers new to Cloudflare, how two players anywhere end up in
+the same game: Workers, Durable Objects and WebSocket hibernation, the invite
+secret, a message-by-message sequence, pseudo code and the real code. It is
+served from [`public/docs/multiplayer.html`](public/docs/multiplayer.html).
+
 ## Publishing
 
 The app is published in two places:
@@ -160,6 +166,7 @@ public/                     the website, exactly as served
   js/online.js              online play: the session, home card, dialogs and invite QR codes
   js/vendor/qrcode.js       QR code encoder (qrcode-generator, MIT)
   docs/architecture.html    how it runs, what it costs, and the alternatives
+  docs/multiplayer.html     how online play pairs two players, for Cloudflare newcomers
 relay/                      the relay: the Worker's code and its Durable Objects
 wrangler.jsonc              the Cloudflare Worker: the site plus the relay
 test/                       engine, protocol and encryption tests
