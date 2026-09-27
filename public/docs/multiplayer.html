@@ -608,10 +608,17 @@ roomId = HKDF(secret, "room")     <span class="cm"># same secret → same roomId
 key    = HKDF(secret, "key")      <span class="cm"># the encryption key; never leaves the device</span>
 
 ws = open WebSocket "wss://relay/v1/rooms/" + roomId
-ws.send({ t: "join", seatToken: mySavedRandomToken })
+hello = { t: "join", seatToken: mySavedRandomToken }
+<span class="kw">if</span> I am the host: hello.create = true           <span class="cm"># only the host may bring a new room into being</span>
+                                                 <span class="cm"># (plus ownerKey, on a private relay)</span>
+ws.send(hello)
 
 <span class="kw">on</span> my move:          ws.send( encrypt(key, move) )
-<span class="kw">on</span> ws message m:     move = decrypt(key, m); apply it to the board
+<span class="kw">on</span> ws message m:
+    <span class="kw">if</span> m is "pong" or relay JSON ("joined", "peer"):   <span class="cm"># from the relay itself, not encrypted</span>
+        update the connection status
+    <span class="kw">else</span>:                                              <span class="cm"># a sealed frame from the other player</span>
+        move = decrypt(key, m); apply it to the board
 
 
 <span class="cm"># ───────── WORKER (runs at the edge nearest each player) ─────────</span>
@@ -635,10 +642,13 @@ ws.send({ t: "join", seatToken: mySavedRandomToken })
     <span class="kw">on</span> message(socket, msg):
         <span class="kw">if</span> socket has no seat yet:                  <span class="cm"># its first message is the join</span>
             h = hash(msg.seatToken)
+            <span class="kw">if</span> seats is empty and not msg.create:
+                                   close(socket, "no such game"); <span class="kw">return</span>
             <span class="kw">if</span> h in seats:         socket.seat = index of h        <span class="cm"># a reconnect</span>
             <span class="kw">elif</span> len(seats) &lt; 2:   seats.append(h); socket.seat = len(seats) - 1
-            <span class="kw">else</span>:                  close(socket, "game is full")
-            tell the other seat's socket "peer online"
+            <span class="kw">else</span>:                  close(socket, "game is full"); <span class="kw">return</span>
+            send socket { t: "joined", seat }
+            tell the other seat's socket { t: "peer", online: true }
             <span class="kw">return</span>
 
         other = the socket whose seat != socket.seat
