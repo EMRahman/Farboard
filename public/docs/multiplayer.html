@@ -138,6 +138,7 @@
 
   /* Cards, code and lists -------------------------------------------- */
   .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .grid-2 > * { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
   .card {
     background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
     padding: 18px 20px; display: flex; flex-direction: column; gap: 8px;
@@ -188,7 +189,7 @@
   @media (max-width: 720px) {
     header.hero { grid-template-columns: 1fr; }
     .mini-board { display: none; }
-    .grid-2 { grid-template-columns: 1fr; }
+    .grid-2 { grid-template-columns: minmax(0, 1fr); }
     th, td { padding: 8px 10px; }
   }
 </style>
@@ -217,6 +218,7 @@
         <a href="#meeting">The meeting point</a>
         <a href="#invite">The invite</a>
         <a href="#sequence">Message by message</a>
+        <a href="#websockets">WebSockets</a>
         <a href="#pseudo">Pseudo code</a>
         <a href="#code">The real code</a>
         <a href="#details">Details</a>
@@ -592,6 +594,225 @@
   </section>
 
   <!-- ============================================================ -->
+  <section id="websockets" aria-labelledby="ws-h">
+    <span class="eyebrow">WebSockets</span>
+    <h2 id="ws-h">The connection every move travels over</h2>
+    <p>
+      Every online game runs over two WebSockets, one per player, and both end in the same Room. Nothing
+      else carries game traffic. The HTTP routes (<code>/v1/info</code>, <code>/v1/stats</code>,
+      <code>/v1/verify</code>) only help the app set itself up.
+    </p>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3>What a WebSocket is</h3>
+        <p>
+          A WebSocket starts as an ordinary HTTP request that asks to <em>upgrade</em>. If the server agrees,
+          it answers <code>101 Switching Protocols</code>, and the same TCP connection then stays open as a
+          two-way channel. Either side can send a message (a <em>frame</em>) at any time, with none of HTTP's
+          per-request overhead.
+        </p>
+        <p class="more"><a href="https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API">MDN: The WebSocket API</a> · <a href="https://www.rfc-editor.org/rfc/rfc6455">RFC 6455</a></p>
+      </div>
+      <div class="card">
+        <h3>Why not plain HTTP?</h3>
+        <p>
+          Plain HTTP has no way for the server to push a message, so a player would have to keep asking
+          "has my opponent moved yet?". Each question would cost a request and add delay. With a WebSocket,
+          the Room pushes the move the moment it arrives. Cloudflare also bills incoming WebSocket messages
+          at a twentieth of a request each.
+        </p>
+      </div>
+    </div>
+
+    <h3>The handshake</h3>
+    <p>
+      The browser writes <code>new WebSocket("wss://…/v1/rooms/&lt;roomId&gt;")</code>
+      (<code>socketUrl</code> in <code>protocol.js</code> turns <code>https</code> into <code>wss</code>),
+      and sends a request like this:
+    </p>
+<pre><code><span class="cm"># browser → Cloudflare</span>
+GET /v1/rooms/Xq3…f9A HTTP/1.1
+Host: farboard.ehsanr-web.workers.dev
+Upgrade: websocket                       <span class="cm"># index.js refuses anything else with 426</span>
+Connection: Upgrade
+Origin: https://farboard.ehsanr-web.workers.dev   <span class="cm"># set by the browser; index.js checks it (403 if not allowed)</span>
+Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+Sec-WebSocket-Version: 13
+
+<span class="cm"># Room → browser (the Workers runtime fills in the handshake headers)</span>
+HTTP/1.1 101 Switching Protocols
+Upgrade: websocket
+Connection: Upgrade
+Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=</code></pre>
+    <p>
+      The Worker only checks the request and passes it to the Room. The Room makes a
+      <code>WebSocketPair</code>, a pair of connected sockets: it keeps one end and returns the other in its
+      <code>101</code> response. From then on, the browser's frames go to Cloudflare's edge and on to the
+      Room, and the Room's frames come back the same way.
+    </p>
+
+    <h3>Hibernation: how the Room holds sockets without staying awake</h3>
+    <p>
+      Cloudflare offers two ways for a Durable Object to own a WebSocket. Farboard uses the second.
+    </p>
+    <div class="grid-2">
+      <div>
+        <p class="file">Standard API (not used)</p>
+<pre><code>server.accept();
+server.addEventListener('message', (e) =&gt; {
+  <span class="cm">// …</span>
+});
+<span class="cm">// The object must stay in memory for as</span>
+<span class="cm">// long as the socket is open, and is</span>
+<span class="cm">// billed for duration the whole time.</span></code></pre>
+      </div>
+      <div>
+        <p class="file">Hibernation API (room.js)</p>
+<pre><code><span class="kw">this</span>.ctx.acceptWebSocket(server);
+<span class="kw">async</span> webSocketMessage(ws, message) { <span class="cm">/* … */</span> }
+<span class="kw">async</span> webSocketClose(ws) { <span class="cm">/* … */</span> }
+<span class="kw">async</span> webSocketError(ws) { <span class="cm">/* … */</span> }
+<span class="cm">// Cloudflare holds the socket, may evict</span>
+<span class="cm">// the object between frames, and wakes it</span>
+<span class="cm">// to call these methods.</span></code></pre>
+      </div>
+    </div>
+    <p>
+      Because the object can be evicted between two frames, anything kept only in its fields may be gone
+      when the next frame arrives. The Room works within that:
+    </p>
+    <ul class="plain">
+      <li><code>ctx.getWebSockets()</code> returns every socket the Room holds, so it never keeps its own list.</li>
+      <li><code>ws.serializeAttachment(state)</code> stores a small object on each socket (its seat, its
+        rate-limit bucket, when it opened), and <code>ws.deserializeAttachment()</code> reads it back after
+        a wake-up.</li>
+      <li>Anything that must outlast the sockets goes in <code>ctx.storage</code>, the Room's database.</li>
+    </ul>
+
+    <h3>What travels over the socket</h3>
+    <p>
+      All frames are text, and the Room refuses binary frames and anything over 16 KB. Frames that start
+      with <code>{</code> are the relay's own JSON messages. The rest are either <code>ping</code>/<code>pong</code>
+      or sealed frames between the players.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Frame</th><th>Direction</th><th>Encrypted</th><th>Meaning</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>{"t":"join", seatToken, create?, ownerKey?}</code></td><td>browser → Room</td><td>no</td><td>Must be the first frame. Claims a seat. A socket still without a seat after 10 seconds is dropped when the next connection arrives.</td></tr>
+          <tr><td><code>{"t":"joined", proto, seat, peer, peerLeft}</code></td><td>Room → browser</td><td>no</td><td>Seat granted, and whether the other player is connected or has left for good.</td></tr>
+          <tr><td><code>{"t":"peer", online, left?}</code></td><td>Room → browser</td><td>no</td><td>The other player connected, disconnected, or left the game for good.</td></tr>
+          <tr><td><code>ping</code> → <code>pong</code></td><td>browser → Room → browser</td><td>no</td><td>Keep-alive: checks the line still works.</td></tr>
+          <tr><td>base64url string, e.g. <code>k3Jd9…</code></td><td>browser → Room → other browser</td><td>yes, AES-GCM</td><td>Moves, state syncs, take-back and draw requests. Forwarded unchanged.</td></tr>
+          <tr><td><code>{"t":"leave"}</code></td><td>browser → Room</td><td>no</td><td>Leaving the game for good. The seat is closed to this player.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Keeping the connection alive on phones</h3>
+    <p>
+      Phones lock their screens, freeze background tabs and switch between Wi-Fi and mobile data. A socket can
+      die without the browser noticing, and browsers do not let pages send WebSocket-level ping frames. So
+      <code>relayclient.js</code> sends its own text <code>"ping"</code> every 50 seconds while the page is on
+      screen. If nothing at all comes back within 10 seconds, it treats the socket as dead and opens a new
+      one. It also checks straight away when the page becomes visible again or the network comes back.
+    </p>
+    <p>
+      The Room answers pings in <code>webSocketMessage</code> like any other frame, so pings go through the
+      same per-socket rate limit and the room's daily message allowance. Pings are counted like moves, so
+      the app sends as few as it can, and none while the tab is hidden.
+    </p>
+
+    <div class="diagram scroll">
+      <svg viewBox="0 0 920 280" role="img" aria-labelledby="st-title st-desc">
+        <title id="st-title">The client connection's states</title>
+        <desc id="st-desc">The client starts connecting and becomes connected when the joined frame arrives. If the socket closes or a ping goes unanswered, it moves to reconnecting, waits with growing backoff and connects again. A fatal close code or leaving the game moves it to stopped from any state.</desc>
+        <defs>
+          <marker id="st-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path class="d-arrow" d="M0,0 L10,5 L0,10 z" />
+          </marker>
+          <marker id="st-arr-ws" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path class="d-arrow ws" d="M0,0 L10,5 L0,10 z" />
+          </marker>
+        </defs>
+
+        <rect class="d-box" x="40" y="96" width="170" height="60" rx="10" />
+        <text class="d-title" x="125" y="131" text-anchor="middle">connecting</text>
+
+        <rect class="d-box key" x="375" y="96" width="170" height="60" rx="10" />
+        <text class="d-title" x="460" y="131" text-anchor="middle">connected</text>
+
+        <rect class="d-box" x="710" y="96" width="170" height="60" rx="10" />
+        <text class="d-title" x="795" y="131" text-anchor="middle">reconnecting</text>
+
+        <rect class="d-box" x="375" y="210" width="170" height="56" rx="10" />
+        <text class="d-title" x="460" y="243" text-anchor="middle">stopped</text>
+
+        <!-- connecting -> connected -->
+        <path class="d-line ws" d="M210 126 L 373 126" marker-end="url(#st-arr-ws)" />
+        <text class="d-code halo" x="292" y="116" text-anchor="middle">"joined" arrives</text>
+
+        <!-- connected -> reconnecting -->
+        <path class="d-line" d="M545 126 L 708 126" marker-end="url(#st-arr)" />
+        <text class="d-text halo" x="627" y="112" text-anchor="middle">socket closed, or no</text>
+        <text class="d-text halo" x="627" y="146" text-anchor="middle">reply to a ping in 10 s</text>
+
+        <!-- reconnecting -> connecting (over the top) -->
+        <path class="d-line" d="M795 96 C 795 30, 125 30, 125 94" marker-end="url(#st-arr)" />
+        <text class="d-text halo" x="460" y="36" text-anchor="middle">wait 1 s, 2 s, 4 s … up to 30 s, or retry at once when the tab is shown or the network returns</text>
+
+        <!-- fatal -> stopped -->
+        <path class="d-line" d="M125 156 C 125 238, 300 238, 373 238" marker-end="url(#st-arr)" />
+        <path class="d-line" d="M460 156 L 460 208" marker-end="url(#st-arr)" />
+        <path class="d-line" d="M795 156 C 795 238, 620 238, 547 238" marker-end="url(#st-arr)" />
+        <text class="d-text halo" x="250" y="200" text-anchor="middle">fatal close code</text>
+        <text class="d-text halo" x="470" y="186">leave</text>
+        <text class="d-text halo" x="670" y="200" text-anchor="middle">fatal close code</text>
+      </svg>
+    </div>
+
+    <h3>Close codes</h3>
+    <p>
+      When the Room ends a connection it gives a reason as a close code. The WebSocket standard reserves
+      4000–4999 for applications, and Farboard defines its own in <code>relay/src/rules.js</code>. The client
+      looks each one up (the <code>FATAL</code> table in <code>relayclient.js</code>) to decide whether
+      reconnecting could help.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Code</th><th>Why the Room closed the socket</th><th>What the client does</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>4409</code></td><td>The same seat connected again elsewhere (a reload or a second tab).</td><td>Stops; the newer connection carries on.</td></tr>
+          <tr><td><code>4429</code></td><td>Too many messages too quickly (bursts of 30, then 3 a second).</td><td>Reconnects after a backoff.</td></tr>
+          <tr><td><code>1009</code></td><td>Frame too large, or not text.</td><td>Reconnects after a backoff.</td></tr>
+          <tr><td><code>4400</code></td><td>Bad request: a missing or malformed join, or a frame that is not allowed.</td><td>Stops.</td></tr>
+          <tr><td><code>4401</code></td><td>No such game: the room does not exist and this join may not create it.</td><td>Stops.</td></tr>
+          <tr><td><code>4403</code></td><td>The game is full: both seats belong to other tokens.</td><td>Stops.</td></tr>
+          <tr><td><code>4410</code></td><td>The game expired after seven quiet days.</td><td>Stops.</td></tr>
+          <tr><td><code>4411</code> · <code>4412</code></td><td>This player left the game · both players left.</td><td>Stops.</td></tr>
+          <tr><td><code>4430</code> · <code>4503</code></td><td>Public hosting limits: too many new games from this network · for today.</td><td>Stops.</td></tr>
+          <tr><td><code>4508</code></td><td>The room used its daily allowance of 5,000 messages.</td><td>Stops.</td></tr>
+          <tr><td>anything else</td><td>A network drop, a Cloudflare restart, a phone going to sleep.</td><td>Reconnects after a backoff.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Where the WebSocket code lives</h3>
+    <ul class="plain">
+      <li><code>public/js/relayclient.js</code>: the browser side. It opens the socket, sends the join, pings, reconnects with backoff, and reads close codes.</li>
+      <li><code>public/js/protocol.js</code>: <code>socketUrl()</code> builds the <code>wss://</code> address.</li>
+      <li><code>relay/src/index.js</code>: checks the upgrade header, the page's origin and the room ID, then passes the request to the Room.</li>
+      <li><code>relay/src/room.js</code>: <code>WebSocketPair</code>, <code>acceptWebSocket</code>, attachments, and the three hibernation handlers.</li>
+      <li><code>relay/src/rules.js</code>: close codes, the frame size limit, the rate limit, and the socket and message caps.</li>
+    </ul>
+  </section>
+
+  <!-- ============================================================ -->
   <section id="pseudo" aria-labelledby="pseudo-h">
     <span class="eyebrow">Pseudo code</span>
     <h2 id="pseudo-h">The whole thing on one screen</h2>
@@ -862,6 +1083,7 @@ npx wrangler deploy                                                   <span clas
         <h3>Web platform</h3>
         <ul class="links">
           <li><a href="https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API">MDN: The WebSocket API</a></li>
+          <li><a href="https://www.rfc-editor.org/rfc/rfc6455">RFC 6455: The WebSocket protocol</a> <span>the handshake, frames and close codes</span></li>
           <li><a href="https://developer.mozilla.org/en-US/docs/Web/API/URL/hash">MDN: URL fragments</a> <span>why the secret stays in the browser</span></li>
           <li><a href="https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/deriveKey">MDN: SubtleCrypto.deriveKey()</a> <span>HKDF in the browser</span></li>
           <li><a href="https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/encrypt#aes-gcm">MDN: AES-GCM encryption</a></li>
