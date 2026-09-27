@@ -103,6 +103,11 @@ WebSocket handshake, hibernation API and close codes, pseudo code and the real
 code. It is served from
 [`public/docs/implementation.html`](public/docs/implementation.html).
 
+**[Design alternatives](https://farboard.ehsanr-web.workers.dev/docs/alternatives)**
+compares the four designs considered for the relay (WebRTC peer-to-peer, a VPS
+relay, AWS serverless and Cloudflare Durable Objects) and why Cloudflare won.
+It is served from [`public/docs/alternatives.html`](public/docs/alternatives.html).
+
 ## Publishing
 
 The app is published in two places:
@@ -169,6 +174,7 @@ public/                     the website, exactly as served
   js/vendor/qrcode.js       QR code encoder (qrcode-generator, MIT)
   docs/architecture.html    what online play is made of, why, and what it costs
   docs/implementation.html  how online play is coded, message by message
+  docs/alternatives.html    the designs considered for the relay, and why this one
   docs/multiplayer.html     redirect from the guide's old address
 relay/                      the relay: the Worker's code and its Durable Objects
 wrangler.jsonc              the Cloudflare Worker: the site plus the relay

@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Farboard Design Alternatives</title>
+<meta name="description" content="Four ways to pass a chess move between two phones — WebRTC peer-to-peer, a VPS relay, AWS serverless and Cloudflare Durable Objects — and why Farboard uses Cloudflare." />
+<style>
+  :root {
+    --bg: #eef0e6;
+    --surface: #ffffff;
+    --surface-2: #e3e7d8;
+    --border: #cbd0bd;
+    --text: #22241f;
+    --dim: #5b6054;
+    --accent: #4b7a1f;
+    --accent-ink: #ffffff;
+    --accent-soft: #dde8cc;
+    --warn: #a86400;
+    --danger: #b3402a;
+    --sq-light: #eeeed2;
+    --sq-dark: #769656;
+    --diagram-cf: rgba(75, 122, 31, 0.07);
+    --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #302e2b;
+      --surface: #262421;
+      --surface-2: #3a3835;
+      --border: #4a4843;
+      --text: #f1f0ee;
+      --dim: #aaa59c;
+      --accent: #81b64c;
+      --accent-ink: #1b2a10;
+      --accent-soft: rgba(129, 182, 76, 0.16);
+      --warn: #e0a03c;
+      --danger: #e2735b;
+      --diagram-cf: rgba(129, 182, 76, 0.07);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #302e2b;
+    --surface: #262421;
+    --surface-2: #3a3835;
+    --border: #4a4843;
+    --text: #f1f0ee;
+    --dim: #aaa59c;
+    --accent: #81b64c;
+    --accent-ink: #1b2a10;
+    --accent-soft: rgba(129, 182, 76, 0.16);
+    --warn: #e0a03c;
+    --danger: #e2735b;
+    --diagram-cf: rgba(129, 182, 76, 0.07);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.55 var(--sans);
+    padding: 0 16px;
+    -webkit-text-size-adjust: 100%;
+  }
+  .page {
+    max-width: 960px;
+    margin: 0 auto;
+    padding-block: 40px 64px;
+    display: flex;
+    flex-direction: column;
+    gap: 56px;
+  }
+  h1, h2, h3 { margin: 0; line-height: 1.2; text-wrap: balance; font-weight: 650; }
+  h1 { font-size: clamp(30px, 5vw, 42px); letter-spacing: -0.5px; }
+  h2 { font-size: 24px; letter-spacing: -0.2px; }
+  h3 { font-size: 17px; }
+  p { margin: 0; max-width: 68ch; }
+  a { color: var(--accent); }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  section { display: flex; flex-direction: column; gap: 18px; }
+  .eyebrow {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  a.eyebrow { text-decoration: none; align-self: flex-start; }
+  a.eyebrow:hover { text-decoration: underline; }
+  .lede { font-size: 18px; color: var(--dim); max-width: 62ch; }
+  .dim { color: var(--dim); }
+  .small { font-size: 14px; }
+
+  /* Hero ------------------------------------------------------------- */
+  header.hero { display: grid; grid-template-columns: 1fr auto; gap: 28px; align-items: end; }
+  .hero-text { display: flex; flex-direction: column; gap: 14px; }
+  .mini-board {
+    width: 112px; height: 112px;
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    border-radius: 6px; overflow: hidden;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  }
+  .mini-board span { background: var(--sq-light); }
+  .mini-board span:nth-child(8n + 2), .mini-board span:nth-child(8n + 4),
+  .mini-board span:nth-child(8n + 5), .mini-board span:nth-child(8n + 7) { background: var(--sq-dark); }
+  .facts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .fact {
+    font-size: 13px; padding: 5px 10px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--text);
+  }
+  nav.toc { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 14px; }
+
+  /* Diagram ---------------------------------------------------------- */
+  .scroll { overflow-x: auto; }
+  .diagram { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+  .diagram svg { display: block; width: 100%; min-width: 680px; height: auto; }
+  .d-box { fill: var(--surface-2); stroke: var(--border); stroke-width: 1.2; }
+  .d-box.key { fill: var(--accent-soft); stroke: var(--accent); }
+  .d-box.fallback { stroke: var(--warn); stroke-dasharray: 5 4; }
+  .d-cf { fill: var(--diagram-cf); stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 6 5; }
+  .d-rule { stroke: var(--border); stroke-width: 1; }
+  .d-title { fill: var(--text); font: 600 15px var(--sans); }
+  .d-name { fill: var(--text); font: 600 13px var(--sans); }
+  .d-text { fill: var(--dim); font: 12.5px var(--sans); }
+  .d-label { fill: var(--accent); font: 600 12px var(--sans); }
+  .d-warn { fill: var(--warn); font: 600 12px var(--sans); }
+  .d-line { stroke: var(--dim); stroke-width: 1.5; fill: none; }
+  .d-line.ws { stroke: var(--accent); stroke-width: 2.2; }
+  .d-line.setup { stroke-dasharray: 4 4; }
+  .d-line.fallback { stroke: var(--warn); stroke-dasharray: 5 4; }
+  .d-arrow { fill: var(--dim); }
+  .d-arrow.ws { fill: var(--accent); }
+  .d-arrow.warn { fill: var(--warn); }
+
+  /* Cards ------------------------------------------------------------ */
+  .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px 20px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .card.chosen { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .card p { font-size: 15px; }
+  .card .verdict { font-size: 14px; border-top: 1px solid var(--border); padding-top: 8px; margin-top: auto; }
+  .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+  /* Tables ----------------------------------------------------------- */
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+  .table-wrap table { min-width: 820px; }
+  th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--border); }
+  tr:last-child td, tr:last-child th { border-bottom: 0; }
+  thead th { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); font-weight: 600; background: var(--surface-2); }
+  thead th:first-child { border-top-left-radius: 11px; }
+  thead th:last-child { border-top-right-radius: 11px; }
+  tbody th { font-weight: 600; width: 170px; }
+  .col-cf { background: var(--accent-soft); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--dim); }
+  .pill.good { background: var(--accent-soft); color: var(--accent); }
+  .pill.warn { color: var(--warn); }
+  .pill.bad { color: var(--danger); }
+
+  .note {
+    border-left: 3px solid var(--accent); padding: 12px 16px; background: var(--surface);
+    border-radius: 0 8px 8px 0; font-size: 15px; display: flex; flex-direction: column; gap: 10px;
+  }
+  ul.plain, ol.plain { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; max-width: 72ch; }
+  footer { font-size: 13px; color: var(--dim); display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--border); padding-top: 20px; }
+
+  @media (max-width: 720px) {
+    header.hero { grid-template-columns: 1fr; }
+    .mini-board { display: none; }
+    .grid-2 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="hero">
+    <div class="hero-text">
+      <a class="eyebrow" href="../">← Farboard</a>
+      <h1>Four ways to pass a chess move, and why Farboard uses Cloudflare</h1>
+      <p class="lede">
+        Two phones in different places need something in between to pass moves. Four designs were
+        considered: WebRTC peer-to-peer, a relay on a rented server (VPS), AWS serverless, and Cloudflare
+        Durable Objects. This page compares them. <a href="architecture.html">Architecture</a> explains the
+        one that won.
+      </p>
+      <div class="facts">
+        <span class="fact">WebRTC</span>
+        <span class="fact">VPS relay</span>
+        <span class="fact">AWS serverless</span>
+        <span class="fact">Cloudflare Durable Objects (chosen)</span>
+      </div>
+      <nav class="toc" aria-label="On this page">
+        <a href="#needs">What the relay must do</a>
+        <a href="#paths">How a move travels</a>
+        <a href="#options">The four designs</a>
+        <a href="#compare">Side by side</a>
+        <a href="#webrtc">Why not WebRTC</a>
+        <a href="#old-ideas">Old ideas, new economics</a>
+        <a href="#chosen">How it was chosen</a>
+      </nav>
+    </div>
+    <div class="mini-board" aria-hidden="true">
+      <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+    </div>
+  </header>
+
+  <!-- ============================================================ -->
+  <section id="needs" aria-labelledby="needs-h">
+    <span class="eyebrow">The requirements</span>
+    <h2 id="needs-h">What any design has to do</h2>
+    <p>
+      Every design below has to meet the same bar. These come from what Farboard already promises players
+      (see the <a href="../">home page</a> and <a href="architecture.html">Architecture</a>):
+    </p>
+    <ul class="plain">
+      <li><strong>Connect any two players</strong>, on home Wi-Fi, mobile data or an office network, with nothing to install.</li>
+      <li><strong>Survive phones going to sleep.</strong> Moves arrive minutes apart; a player who reconnects catches up on what they missed.</li>
+      <li><strong>Keep moves private.</strong> Moves are end-to-end encrypted, so whatever sits in the middle cannot read them.</li>
+      <li><strong>Cost nothing at small scale</strong>, and never send a surprise bill if usage spikes.</li>
+      <li><strong>Be easy to copy.</strong> Anyone can run their own Farboard with one button.</li>
+    </ul>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="paths" aria-labelledby="paths-h">
+    <span class="eyebrow">The whole picture</span>
+    <h2 id="paths-h">How one move travels in each design</h2>
+
+    <div class="diagram scroll">
+      <svg viewBox="0 0 920 552" role="img" aria-labelledby="paths-title paths-desc">
+        <title id="paths-title">How a move travels in four designs</title>
+        <desc id="paths-desc">WebRTC sends moves directly between phones after a signalling server introduces them, with a TURN relay as fallback. A VPS relay passes moves through one server you run. AWS passes each move through API Gateway, a Lambda function and a DynamoDB lookup. Cloudflare passes each move through a Worker to one Durable Object per game, which holds both players' connections.</desc>
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path class="d-arrow" d="M0,0 L10,5 L0,10 z" />
+          </marker>
+          <marker id="arr-ws" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path class="d-arrow ws" d="M0,0 L10,5 L0,10 z" />
+          </marker>
+          <marker id="arr-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path class="d-arrow warn" d="M0,0 L10,5 L0,10 z" />
+          </marker>
+        </defs>
+
+        <!-- Lane 1: WebRTC (top 16) -->
+        <text class="d-title" x="24" y="52">WebRTC</text>
+        <text class="d-text" x="24" y="74">peer-to-peer, plus two</text>
+        <text class="d-text" x="24" y="92">servers to make it work</text>
+        <rect class="d-box" x="200" y="56" width="100" height="48" rx="10" />
+        <text class="d-name" x="250" y="84" text-anchor="middle">Phone A</text>
+        <rect class="d-box" x="780" y="56" width="100" height="48" rx="10" />
+        <text class="d-name" x="830" y="84" text-anchor="middle">Phone B</text>
+        <rect class="d-box" x="470" y="20" width="160" height="34" rx="8" />
+        <text class="d-name" x="550" y="42" text-anchor="middle">Signalling server</text>
+        <rect class="d-box fallback" x="470" y="100" width="160" height="30" rx="8" />
+        <text class="d-name" x="550" y="120" text-anchor="middle">TURN relay</text>
+        <path class="d-line setup" d="M300 62 L468 37" marker-end="url(#arr)" />
+        <path class="d-line setup" d="M632 37 L778 62" marker-end="url(#arr)" />
+        <path class="d-line ws" d="M300 80 L778 80" marker-end="url(#arr-ws)" />
+        <path class="d-line fallback" d="M300 98 L468 115" marker-end="url(#arr-warn)" />
+        <path class="d-line fallback" d="M632 115 L778 98" marker-end="url(#arr-warn)" />
+        <text class="d-label" x="540" y="72" text-anchor="middle">direct, if the networks allow</text>
+        <text class="d-text" x="316" y="44">introduce</text>
+        <text class="d-warn" x="330" y="128">if direct fails</text>
+
+        <line class="d-rule" x1="16" y1="146" x2="904" y2="146" />
+
+        <!-- Lane 2: VPS relay (top 150) -->
+        <text class="d-title" x="24" y="186">VPS relay</text>
+        <text class="d-text" x="24" y="208">one server process</text>
+        <text class="d-text" x="24" y="226">that you run</text>
+        <rect class="d-box" x="200" y="190" width="100" height="48" rx="10" />
+        <text class="d-name" x="250" y="218" text-anchor="middle">Phone A</text>
+        <rect class="d-box" x="450" y="182" width="200" height="64" rx="10" />
+        <text class="d-name" x="550" y="208" text-anchor="middle">Your server</text>
+        <text class="d-text" x="550" y="228" text-anchor="middle">one region · you patch it</text>
+        <rect class="d-box" x="780" y="190" width="100" height="48" rx="10" />
+        <text class="d-name" x="830" y="218" text-anchor="middle">Phone B</text>
+        <path class="d-line ws" d="M300 214 L448 214" marker-end="url(#arr-ws)" />
+        <path class="d-line ws" d="M650 214 L778 214" marker-end="url(#arr-ws)" />
+
+        <line class="d-rule" x1="16" y1="280" x2="904" y2="280" />
+
+        <!-- Lane 3: AWS (top 284) -->
+        <text class="d-title" x="24" y="320">AWS serverless</text>
+        <text class="d-text" x="24" y="342">three services</text>
+        <text class="d-text" x="24" y="360">for every move</text>
+        <rect class="d-box" x="200" y="316" width="100" height="48" rx="10" />
+        <text class="d-name" x="250" y="344" text-anchor="middle">Phone A</text>
+        <rect class="d-box" x="330" y="316" width="120" height="48" rx="10" />
+        <text class="d-name" x="390" y="344" text-anchor="middle">API Gateway</text>
+        <rect class="d-box" x="490" y="316" width="100" height="48" rx="10" />
+        <text class="d-name" x="540" y="344" text-anchor="middle">Lambda</text>
+        <rect class="d-box" x="630" y="316" width="110" height="48" rx="10" />
+        <text class="d-name" x="685" y="344" text-anchor="middle">DynamoDB</text>
+        <rect class="d-box" x="780" y="316" width="100" height="48" rx="10" />
+        <text class="d-name" x="830" y="344" text-anchor="middle">Phone B</text>
+        <path class="d-line" d="M300 340 L328 340" marker-end="url(#arr)" />
+        <path class="d-line" d="M450 332 L488 332" marker-end="url(#arr)" />
+        <path class="d-line" d="M490 348 L452 348" marker-end="url(#arr)" />
+        <path class="d-line" d="M590 340 L628 340" marker-end="url(#arr)" />
+        <path class="d-line" d="M390 364 L390 392 L830 392 L830 366" marker-end="url(#arr)" />
+        <text class="d-text" x="609" y="308" text-anchor="middle">find the peer</text>
+        <text class="d-text" x="600" y="386">PostToConnection</text>
+
+        <line class="d-rule" x1="16" y1="414" x2="904" y2="414" />
+
+        <!-- Lane 4: Cloudflare (top 418) -->
+        <text class="d-title" x="24" y="454">Cloudflare</text>
+        <text class="d-text" x="24" y="476">one object per game</text>
+        <text class="d-label" x="24" y="498">CHOSEN</text>
+        <rect class="d-cf" x="326" y="428" width="428" height="108" rx="14" />
+        <text class="d-label" x="340" y="448">CLOUDFLARE · FREE PLAN</text>
+        <rect class="d-box" x="200" y="462" width="100" height="48" rx="10" />
+        <text class="d-name" x="250" y="490" text-anchor="middle">Phone A</text>
+        <rect class="d-box" x="344" y="462" width="110" height="48" rx="10" />
+        <text class="d-name" x="399" y="490" text-anchor="middle">Worker</text>
+        <rect class="d-box key" x="506" y="456" width="228" height="64" rx="10" />
+        <text class="d-name" x="620" y="482" text-anchor="middle">Room · one per game</text>
+        <text class="d-text" x="620" y="502" text-anchor="middle">holds both players' sockets</text>
+        <rect class="d-box" x="780" y="462" width="100" height="48" rx="10" />
+        <text class="d-name" x="830" y="490" text-anchor="middle">Phone B</text>
+        <path class="d-line ws" d="M300 486 L342 486" marker-end="url(#arr-ws)" />
+        <path class="d-line ws" d="M454 486 L504 486" marker-end="url(#arr-ws)" />
+        <path class="d-line ws" d="M734 486 L778 486" marker-end="url(#arr-ws)" />
+      </svg>
+    </div>
+    <p class="small dim">
+      The Cloudflare lane has the same shape as the VPS lane: one thing in the middle holds both players.
+      The difference is that Cloudflare runs it, one per game, and puts it to sleep between moves.
+    </p>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="options" aria-labelledby="options-h">
+    <span class="eyebrow">The candidates</span>
+    <h2 id="options-h">The four designs</h2>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head"><h3>1. WebRTC peer-to-peer</h3><span class="pill warn">ruled out</span></div>
+        <p>
+          The phones talk to each other directly over a WebRTC data channel. A signalling server introduces
+          them first, and STUN helps each phone find its public address. It sounds as if it needs no server,
+          and the data channel is encrypted by default.
+        </p>
+        <p class="verdict">
+          <b>Why not:</b> direct connections fail on some mobile and office networks, which then need a TURN
+          relay. You still run a signalling server as well, so it takes two servers to avoid one.
+          <a href="#webrtc">More below.</a>
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>2. VPS relay</h3><span class="pill">the familiar one</span></div>
+        <p>
+          A small rented server runs a WebSocket process. Both players connect to it, and it forwards each
+          move to the other socket. The code is short and the model is the one most web developers already
+          know.
+        </p>
+        <p class="verdict">
+          <b>Why not:</b> a monthly fee whether anyone plays or not. You also own the operating system
+          updates, TLS certificates, restarts and monitoring. It sits in one region, and a one-button copy
+          for other people is much harder.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>3. AWS serverless</h3><span class="pill">many moving parts</span></div>
+        <p>
+          API Gateway holds the WebSockets. Each message starts a Lambda, which looks up the other player's
+          connection in DynamoDB and sends the move with <code>PostToConnection</code>. IAM roles and
+          infrastructure as code tie it together.
+        </p>
+        <p class="verdict">
+          <b>Why not:</b> about $1 a month at 100 games a day, and it keeps billing if usage spikes. Budget
+          alerts warn you but do not stop spending. <a href="architecture.html#compare">Cost breakdown.</a>
+        </p>
+      </div>
+
+      <div class="card chosen">
+        <div class="card-head"><h3>4. Cloudflare Durable Objects</h3><span class="pill good">chosen</span></div>
+        <p>
+          A Worker routes each game to its own Durable Object, called a Room. The Room holds both WebSockets
+          and forwards moves with one <code>send()</code>. The code is shaped like a VPS relay, but there is
+          no server to run.
+        </p>
+        <p class="verdict">
+          <b>Why:</b> $0 on the free plan. 100 games a day uses about 2% of the allowance, and at the limit
+          it pauses instead of billing. It hibernates between moves, and one button deploys a copy.
+          The trade-off is that it's specific to Cloudflare.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="compare" aria-labelledby="compare-h">
+    <span class="eyebrow">Side by side</span>
+    <h2 id="compare-h">How they compare on what matters</h2>
+
+    <div class="table-wrap scroll">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col"></th>
+            <th scope="col">WebRTC</th>
+            <th scope="col">VPS relay</th>
+            <th scope="col">AWS serverless</th>
+            <th scope="col" class="col-cf">Cloudflare (today)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Servers or services to set up</th>
+            <td>Signalling + TURN</td>
+            <td>One server</td>
+            <td>API Gateway, Lambda, DynamoDB, IAM</td>
+            <td class="col-cf">One Worker, one class</td>
+          </tr>
+          <tr>
+            <th scope="row">Works on every network</th>
+            <td><span class="pill warn">Only with TURN</span> Symmetric NAT and UDP-blocking firewalls stop direct links</td>
+            <td><span class="pill good">Yes</span> Plain HTTPS WebSocket</td>
+            <td><span class="pill good">Yes</span> Plain HTTPS WebSocket</td>
+            <td class="col-cf"><span class="pill good">Yes</span> Plain HTTPS WebSocket</td>
+          </tr>
+          <tr>
+            <th scope="row">After a phone sleeps</th>
+            <td>The connection has to be negotiated again through the signalling server</td>
+            <td>Reconnect to the same server</td>
+            <td>Reconnect; a new connection id goes into DynamoDB</td>
+            <td class="col-cf">Reconnect to the same Room by name</td>
+          </tr>
+          <tr>
+            <th scope="row">Who sees your IP address</th>
+            <td>Your opponent, unless every packet goes through TURN</td>
+            <td>Only the server</td>
+            <td>Only AWS</td>
+            <td class="col-cf">Only the relay</td>
+          </tr>
+          <tr>
+            <th scope="row">Running it</th>
+            <td>Two services, and debugging connections that work on one network but not another</td>
+            <td>OS updates, TLS certificates, restarts, monitoring</td>
+            <td>Several consoles, IAM policies, budgets</td>
+            <td class="col-cf">Nothing to patch; logs and metrics in one dashboard</td>
+          </tr>
+          <tr>
+            <th scope="row">Cost at 100 games a day</th>
+            <td>Small. Chess uses little TURN bandwidth, but the signalling and TURN services still have to be hosted somewhere</td>
+            <td><span class="pill">A fixed monthly fee</span> even when nobody plays</td>
+            <td><span class="pill">≈ $1 a month</span></td>
+            <td class="col-cf"><span class="pill good">$0</span></td>
+          </tr>
+          <tr>
+            <th scope="row">If usage spikes</th>
+            <td>Depends where the two servers run</td>
+            <td>Slows or drops connections; the bill stays fixed</td>
+            <td><span class="pill bad">Keeps billing</span></td>
+            <td class="col-cf">Online play pauses until 00:00 UTC; never billed</td>
+          </tr>
+          <tr>
+            <th scope="row">A copy of your own</th>
+            <td>Hard: two services to deploy</td>
+            <td>Hard: rent and set up a server</td>
+            <td>Hard: an AWS account and a stack to deploy</td>
+            <td class="col-cf">One <em>Deploy to Cloudflare</em> button</td>
+          </tr>
+          <tr>
+            <th scope="row">Lock-in</th>
+            <td>Low: an open standard</td>
+            <td>None</td>
+            <td>High: three AWS-only services</td>
+            <td class="col-cf">Medium: Durable Objects exist only on Cloudflare, but the relay is one small file (<code>relay/src/room.js</code>)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small dim">
+      AWS and Cloudflare figures come from <a href="architecture.html#compare">Architecture</a>, which also
+      covers Vercel.
+    </p>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="webrtc" aria-labelledby="webrtc-h">
+    <span class="eyebrow">Why not WebRTC</span>
+    <h2 id="webrtc-h">Peer-to-peer isn't always reachable</h2>
+    <p>
+      WebRTC lets two browsers connect directly, but only if their networks allow it. Each phone asks a STUN
+      server what its public address looks like, then both try to punch through their routers to reach each
+      other (a process called ICE). That works on most home networks. It often fails when:
+    </p>
+    <ul class="plain">
+      <li><strong>A mobile carrier uses carrier-grade NAT</strong> that picks a new external port for every
+        destination (symmetric NAT). The address STUN reports is then useless to the other phone.</li>
+      <li><strong>An office or school firewall blocks UDP</strong>, or everything except web traffic.</li>
+    </ul>
+    <p>
+      Those connections need a <strong>TURN</strong> server that relays every packet. By common estimates
+      that's roughly 10–25% of real-world sessions
+      (<a href="https://www.forasoft.com/learn/video-streaming/articles-streaming/nat-stun-turn-ice-webrtc">Fora Soft</a>,
+      <a href="https://bloggeek.me/webrtcglossary/turn/">BlogGeek.me</a>). So a WebRTC design is really
+      three parts: a signalling server, a TURN relay, and the direct link when it works.
+    </p>
+    <p>
+      For a video call, avoiding a relay saves real bandwidth. Chess moves are a few hundred bytes each,
+      so that saving doesn't matter. WebRTC would add a second way of connecting to test and debug, and
+      it would show each player's IP address to the other. A relay was needed either way, so the simplest
+      design was a relay for everyone.
+    </p>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="old-ideas" aria-labelledby="old-h">
+    <span class="eyebrow">Old ideas, new economics</span>
+    <h2 id="old-h">The winner is a familiar design, now almost free to run</h2>
+    <p>
+      None of the ideas behind the Cloudflare design are new. What changed is how little they cost to run.
+    </p>
+    <div class="grid-2">
+      <div class="card">
+        <h3>The actor model (1970s) and Erlang (1980s)</h3>
+        <p>
+          Each piece of state lives in its own small process, and only that process can change it. A
+          Durable Object is exactly this: one Room per game, the only code that can change that game's
+          seats. That rules out locks and database race conditions.
+        </p>
+      </div>
+      <div class="card">
+        <h3>The stateful game server</h3>
+        <p>
+          It's what you would write on a VPS: one process holds both connections and forwards moves.
+          A Room is that process, one per game, running on Cloudflare's network instead of on a
+          machine you rent.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Isolates, not containers</h3>
+        <p>
+          Workers run in V8 isolates, the same sandbox a browser gives each tab. One starts in
+          milliseconds and uses little memory, so a single machine can hold thousands of them.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Hibernation</h3>
+        <p>
+          A Room sleeps between moves while its WebSockets stay open at the edge. A chess game spends
+          almost all of its time waiting for someone to think, so it costs almost nothing.
+        </p>
+      </div>
+    </div>
+    <p>
+      AWS built serverless by combining separate services, each billed on its own. Cloudflare built a
+      smaller set of building blocks around one cheap unit, the isolate, and gave state a home right next
+      to it. Cloudflare also builds its <a href="https://github.com/cloudflare/agents">Agents SDK</a> on
+      the same building block, one Durable Object per AI agent. That suggests the design will be supported
+      for a long time.
+    </p>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="chosen" aria-labelledby="chosen-h">
+    <span class="eyebrow">How it was chosen</span>
+    <h2 id="chosen-h">A note from the author</h2>
+    <div class="note">
+      <p>
+        I've run VPS servers for 20 years, so a VPS relay was my natural choice. AWS serverless felt like it
+        needed a certification just to understand the moving parts. I didn't know Cloudflare's design existed
+        until an AI coding assistant suggested it, together with the VPS and WebRTC options on this page.
+      </p>
+      <p>
+        The AI helped in three ways. It showed me the option existed. It built a working version quickly
+        enough that trying it was worth the time. And it explained Durable Objects well enough that I could
+        judge the design myself. Without that, I'd have stayed with the VPS, because testing and designing
+        something unfamiliar would have cost more time than it could save.
+      </p>
+      <p>
+        The choice was still mine. I made it by comparing working versions instead of guessing.
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      WebRTC connection figures are estimates from
+      <a href="https://www.forasoft.com/learn/video-streaming/articles-streaming/nat-stun-turn-ice-webrtc">Fora Soft</a>
+      and <a href="https://bloggeek.me/webrtcglossary/turn/">BlogGeek.me</a>; see also
+      <a href="https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Protocols">MDN: Introduction to WebRTC protocols</a>.
+      AWS and Cloudflare costs are from <a href="architecture.html#compare">Architecture</a>, checked on 26 September 2026.
+    </p>
+    <p>
+      <a href="architecture.html">Architecture</a>: what the chosen design is made of and what it costs ·
+      <a href="implementation.html">Implementation</a>: how it is coded.
+    </p>
+  </footer>
+</div>
+</body>
+</html>
