@@ -89,17 +89,19 @@ version, run `npx wrangler dev --var PUBLIC_HOSTING:true --var DAILY_GAME_LIMIT:
 
 ## How it runs
 
-**[How Farboard runs](https://farboard.ehsanr-web.workers.dev/docs/architecture)**
-is a visual guide to the architecture: which Cloudflare pieces Farboard uses,
-what one game costs against the free plan (requests, GB-seconds, SQL rows,
-storage), and how the same app would look on AWS or Vercel. It is served with
-the site from [`public/docs/architecture.html`](public/docs/architecture.html).
+**[Architecture](https://farboard.ehsanr-web.workers.dev/docs/architecture)**
+explains what online play is made of and why: the problem a relay solves, the
+Cloudflare pieces (Workers, Durable Objects, WebSocket hibernation), how two
+players meet in one Room, the invite secret, what one game costs against the
+free plan (requests, GB-seconds, SQL rows, storage), and how the same app would
+look on AWS or Vercel. It is served with the site from
+[`public/docs/architecture.html`](public/docs/architecture.html).
 
-**[How online play works](https://farboard.ehsanr-web.workers.dev/docs/multiplayer)**
-explains, for programmers new to Cloudflare, how two players anywhere end up in
-the same game: Workers, Durable Objects and WebSocket hibernation, the invite
-secret, a message-by-message sequence, pseudo code and the real code. It is
-served from [`public/docs/multiplayer.html`](public/docs/multiplayer.html).
+**[Implementation](https://farboard.ehsanr-web.workers.dev/docs/implementation)**
+shows how it is coded: `wrangler.jsonc`, a message-by-message sequence, the
+WebSocket handshake, hibernation API and close codes, pseudo code and the real
+code. It is served from
+[`public/docs/implementation.html`](public/docs/implementation.html).
 
 ## Publishing
 
@@ -165,8 +167,9 @@ public/                     the website, exactly as served
   js/relayclient.js         online play: the connection to the relay, kept alive
   js/online.js              online play: the session, home card, dialogs and invite QR codes
   js/vendor/qrcode.js       QR code encoder (qrcode-generator, MIT)
-  docs/architecture.html    how it runs, what it costs, and the alternatives
-  docs/multiplayer.html     how online play pairs two players, for Cloudflare newcomers
+  docs/architecture.html    what online play is made of, why, and what it costs
+  docs/implementation.html  how online play is coded, message by message
+  docs/multiplayer.html     redirect from the guide's old address
 relay/                      the relay: the Worker's code and its Durable Objects
 wrangler.jsonc              the Cloudflare Worker: the site plus the relay
 test/                       engine, protocol and encryption tests

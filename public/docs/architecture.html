@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Farboard Architecture</title>
-<meta name="description" content="How Farboard runs on Cloudflare, what one game costs against the free plan, and how the same app would look on AWS or Vercel." />
+<meta name="description" content="How Farboard's online play is built on Cloudflare and why: Workers, one Durable Object per game, the invite secret, what one game costs against the free plan, and how the same app would look on AWS or Vercel." />
 <style>
   :root {
     --bg: #eef0e6;
@@ -64,7 +64,7 @@
     background: var(--bg);
     color: var(--text);
     font: 16px/1.55 var(--sans);
-    padding: 0 20px;
+    padding: 0 16px;
     -webkit-text-size-adjust: 100%;
   }
   .page {
@@ -82,7 +82,7 @@
   p { margin: 0; max-width: 68ch; }
   a { color: var(--accent); }
   code, .mono { font-family: var(--mono); font-size: 0.88em; }
-  code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+  code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   section { display: flex; flex-direction: column; gap: 18px; }
@@ -116,6 +116,7 @@
     font-size: 13px; padding: 5px 10px; border-radius: 999px;
     background: var(--accent-soft); color: var(--text);
   }
+  nav.toc { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 14px; }
 
   /* Diagram ---------------------------------------------------------- */
   .scroll { overflow-x: auto; }
@@ -133,6 +134,7 @@
   .d-line.ws { stroke: var(--accent); stroke-width: 2.2; }
   .d-arrow { fill: var(--dim); }
   .d-arrow.ws { fill: var(--accent); }
+  .halo { paint-order: stroke; stroke: var(--surface); stroke-width: 5px; stroke-linejoin: round; }
 
   /* Cards and lists -------------------------------------------------- */
   .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
@@ -141,6 +143,8 @@
     padding: 18px 20px; display: flex; flex-direction: column; gap: 8px;
   }
   .card p { font-size: 15px; }
+  .card .analogy { font-size: 14px; color: var(--dim); }
+  .card .more { font-size: 14px; border-top: 1px solid var(--border); padding-top: 8px; margin-top: auto; }
   .card .example { font-size: 14px; color: var(--dim); border-top: 1px solid var(--border); padding-top: 8px; margin-top: 2px; }
   .term { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   .allow { font-family: var(--mono); font-size: 13px; color: var(--accent); white-space: nowrap; }
@@ -231,16 +235,29 @@
       <a class="eyebrow" href="../">← Farboard</a>
       <h1>One Worker, one small database per game, and a free plan that cannot bill you</h1>
       <p class="lede">
-        Farboard is a static page plus a tiny relay that passes encrypted moves between two players.
-        This page explains the pieces, what a single game costs against Cloudflare's free plan,
-        and what the same app would take on AWS or Vercel.
+        What Farboard's online play is made of, and why it is built this way: the problem a relay solves,
+        the Cloudflare pieces it uses, how two players meet without anyone introducing them, and what a game
+        costs here and on AWS or Vercel. <a href="implementation.html">Implementation</a> shows how it is coded.
       </p>
       <div class="facts">
-        <span class="fact">Cloudflare Workers free plan</span>
+        <span class="fact">Workers</span>
         <span class="fact">Durable Objects (SQLite)</span>
+        <span class="fact">WebSocket Hibernation</span>
         <span class="fact">End-to-end encrypted</span>
         <span class="fact">Default cap: 100 new games a day</span>
       </div>
+      <nav class="toc" aria-label="On this page">
+        <a href="#problem">The problem</a>
+        <a href="#cloudflare">Cloudflare in four ideas</a>
+        <a href="#architecture">What talks to what</a>
+        <a href="#meeting">The meeting point</a>
+        <a href="#invite">The invite</a>
+        <a href="#game">Life of a game</a>
+        <a href="#terms">The units on the bill</a>
+        <a href="#budget">Daily budget</a>
+        <a href="#compare">Other platforms</a>
+        <a href="#check">Real numbers</a>
+      </nav>
     </div>
     <div class="mini-board" aria-hidden="true">
       <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
@@ -249,11 +266,100 @@
   </header>
 
   <!-- ============================================================ -->
+  <section id="problem" aria-labelledby="problem-h">
+    <span class="eyebrow">The problem</span>
+    <h2 id="problem-h">Two browsers cannot simply call each other</h2>
+    <p>
+      A web page can make outgoing connections, but it cannot listen on a port, and most devices sit behind
+      a home router or a mobile network (NAT) that blocks incoming connections anyway. So when two players
+      are in different places, neither can reach the other directly.
+    </p>
+    <p>
+      The usual answer is a <strong>relay</strong>: a server with a public address that both players connect
+      out to. Whatever one player sends, the relay passes to the other. The relay needs two properties:
+    </p>
+    <ul class="plain">
+      <li><strong>One meeting point per game.</strong> Both players' connections must reach the same piece of
+        running code, wherever in the world each player is.</li>
+      <li><strong>Long-lived connections.</strong> Moves arrive minutes apart, so each player keeps a
+        WebSocket open for the whole game.</li>
+    </ul>
+    <p>
+      On a traditional host you would run one server process and point everyone at it. Farboard does not run
+      a server at all. It uses Cloudflare, where the "meeting point" is a built-in feature, the Durable
+      Object.
+    </p>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="cloudflare" aria-labelledby="cf-h">
+    <span class="eyebrow">Cloudflare in four ideas</span>
+    <h2 id="cf-h">All the Cloudflare you need for this page</h2>
+    <p>
+      Cloudflare runs data centres in hundreds of cities. A request from a player goes to the one nearest
+      them, which is called the <em>edge</em>. Four features matter here, and all of them are set up by one
+      file, <code>wrangler.jsonc</code>, at the top of the repository
+      (<a href="implementation.html#config">shown in Implementation</a>).
+    </p>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3>1. Workers: code without a server</h3>
+        <p>
+          A Worker is a JavaScript module that exports a <code>fetch(request, env)</code> function. Cloudflare
+          calls it for each HTTP request, in whichever data centre received the request, and it returns a
+          <code>Response</code>. There is no process for you to start or keep running. Farboard's Worker is
+          <code>relay/src/index.js</code>.
+        </p>
+        <p class="analogy">Like an Express route handler, but deployed everywhere at once and started on demand.</p>
+        <p class="more"><a href="https://developers.cloudflare.com/workers/">Workers docs</a></p>
+      </div>
+
+      <div class="card">
+        <h3>2. Static assets: the website itself</h3>
+        <p>
+          <code>"assets": { "directory": "./public" }</code> tells Cloudflare to serve the files in
+          <code>public/</code> directly from the edge. Worker code runs only when no file matches, which here
+          means the <code>/v1/…</code> routes. One deployment is therefore both the chess app and its relay,
+          at one address.
+        </p>
+        <p class="analogy">Like a CDN in front of your app, with your app as the fallback.</p>
+        <p class="more"><a href="https://developers.cloudflare.com/workers/static-assets/">Static assets docs</a></p>
+      </div>
+
+      <div class="card">
+        <h3>3. Durable Objects: one named instance, worldwide</h3>
+        <p>
+          A Worker keeps nothing between requests, and two requests may run in two different cities. A
+          Durable Object (DO) is an instance of a JavaScript class that you address by <strong>name</strong>.
+          Cloudflare guarantees that at most one instance with a given name is running anywhere in the world,
+          and every request for that name is routed to it. It handles one event at a time and has its own
+          small private database.
+        </p>
+        <p class="analogy">Like a singleton object per key that stays reachable over the network, with storage attached.</p>
+        <p class="more"><a href="https://developers.cloudflare.com/durable-objects/concepts/what-are-durable-objects/">What are Durable Objects?</a></p>
+      </div>
+
+      <div class="card">
+        <h3>4. WebSocket Hibernation: idle connections cost nothing</h3>
+        <p>
+          A Durable Object can accept WebSockets. With the Hibernation API, Cloudflare keeps the connections
+          open at its edge but can take the object out of memory between messages. The next message wakes it
+          up again. A chess game spends nearly all its time waiting for someone to think, so it spends nearly
+          all its time hibernating, and hibernation is not billed.
+        </p>
+        <p class="analogy">Like a server that is started for each message, while the sockets never notice.</p>
+        <p class="more"><a href="https://developers.cloudflare.com/durable-objects/best-practices/websockets/">WebSockets and hibernation</a></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
   <section id="architecture" aria-labelledby="arch-h">
-    <span class="eyebrow">Architecture</span>
+    <span class="eyebrow">The whole system</span>
     <h2 id="arch-h">What talks to what</h2>
     <p>
-      Everything lives in a single Cloudflare Worker named <code>farboard</code>. Files in
+      Those four pieces make up one Cloudflare Worker named <code>farboard</code>. Files in
       <code>public/</code> are served straight from Cloudflare's edge without running any code. Any
       other request runs the Worker's own code, in <code>relay/src/index.js</code>. That code answers
       the four <code>/v1/</code> routes and returns a 404 for everything else, such as a mistyped
@@ -351,32 +457,178 @@
       <code>ALLOWED_ORIGINS</code>.
     </p>
 
-    <div class="grid-2">
-      <div class="card">
-        <h3>Why one Durable Object per game</h3>
-        <p>
-          Both players' sockets land in the same object, so passing a move is a single
-          <code>peer.send()</code>. No message broker is needed, and no lookup of where the other player
-          is connected. The object handles one event at a time, which also settles races such as two people
-          opening the same invite at once.
-        </p>
-      </div>
-      <div class="card">
-        <h3>What the relay can and cannot see</h3>
-        <p>
-          The key comes from the invite secret, which never leaves the players' devices, so every frame
-          reaches the relay already encrypted with AES-GCM. The relay sees IP addresses and timing, and
-          stores only two hashes, a creation time and a message counter per game. The moves themselves
-          live on the two devices.
-        </p>
-      </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="meeting" aria-labelledby="meeting-h">
+    <span class="eyebrow">The meeting point</span>
+    <h2 id="meeting-h">Same name, same object, wherever the players are</h2>
+    <p>
+      This is the whole trick. Both players connect to <code>/v1/rooms/&lt;roomId&gt;</code>. Each connection
+      reaches the Worker at the data centre nearest that player, and each Worker asks for the Room named
+      <code>roomId</code>. The name is the same, so Cloudflare sends both connections to the same single
+      instance. Once there, passing a move from one player to the other is one <code>send()</code> call:
+      no message broker, and no lookup of where the other player is connected. Because the object handles
+      one event at a time, it also settles races such as two people opening the same invite at once.
+    </p>
+
+    <div class="diagram scroll">
+      <svg viewBox="0 0 920 400" role="img" aria-labelledby="meet-title meet-desc">
+        <title id="meet-title">Two players meet in one Durable Object</title>
+        <desc id="meet-desc">A player in London connects to the Worker at the London edge and a player in Tokyo connects to the Worker at the Tokyo edge. Both Workers call idFromName with the same room id and reach the same single Room Durable Object, which forwards messages between the two sockets.</desc>
+        <defs>
+          <marker id="m-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path class="d-arrow" d="M0,0 L10,5 L0,10 z" />
+          </marker>
+          <marker id="m-arr-ws" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path class="d-arrow ws" d="M0,0 L10,5 L0,10 z" />
+          </marker>
+        </defs>
+
+        <!-- Players -->
+        <rect class="d-box" x="16" y="150" width="172" height="112" rx="10" />
+        <text class="d-title" x="30" y="178">Host, London</text>
+        <text class="d-text" x="30" y="200">derived roomId</text>
+        <text class="d-code" x="30" y="220">Xq3…f9A</text>
+        <text class="d-text" x="30" y="244">from the invite secret</text>
+
+        <rect class="d-box" x="732" y="150" width="172" height="112" rx="10" />
+        <text class="d-title" x="746" y="178">Guest, Tokyo</text>
+        <text class="d-text" x="746" y="200">derived roomId</text>
+        <text class="d-code" x="746" y="220">Xq3…f9A</text>
+        <text class="d-text" x="746" y="244">from the same secret</text>
+
+        <!-- Cloudflare -->
+        <rect class="d-cf" x="210" y="16" width="500" height="368" rx="16" />
+        <text class="d-label" x="228" y="40">CLOUDFLARE</text>
+
+        <rect class="d-box" x="232" y="58" width="200" height="92" rx="10" />
+        <text class="d-title" x="246" y="84">Worker · London edge</text>
+        <text class="d-code" x="246" y="106">relay/src/index.js</text>
+        <text class="d-text" x="246" y="128">checks origin and room id</text>
+
+        <rect class="d-box" x="488" y="58" width="200" height="92" rx="10" />
+        <text class="d-title" x="502" y="84">Worker · Tokyo edge</text>
+        <text class="d-code" x="502" y="106">relay/src/index.js</text>
+        <text class="d-text" x="502" y="128">same code, other city</text>
+
+        <rect class="d-box key" x="310" y="236" width="300" height="128" rx="10" />
+        <text class="d-title" x="326" y="264">Room "Xq3…f9A" · the only one</text>
+        <text class="d-code" x="326" y="286">relay/src/room.js</text>
+        <text class="d-text" x="326" y="310">seat 0: host's socket</text>
+        <text class="d-text" x="326" y="330">seat 1: guest's socket</text>
+        <text class="d-text" x="326" y="350">passes each frame to the other seat</text>
+
+        <!-- Player -> Worker -->
+        <path class="d-line ws" d="M188 190 C 206 190, 206 104, 230 104" marker-end="url(#m-arr-ws)" />
+        <text class="d-label halo" x="120" y="138">WebSocket</text>
+        <path class="d-line ws" d="M732 190 C 714 190, 714 104, 690 104" marker-end="url(#m-arr-ws)" />
+        <text class="d-label halo" x="740" y="138">WebSocket</text>
+
+        <!-- Worker -> Room -->
+        <path class="d-line" d="M332 150 L 400 234" marker-end="url(#m-arr)" />
+        <path class="d-line" d="M588 150 L 520 234" marker-end="url(#m-arr)" />
+        <text class="d-code halo" x="460" y="184" text-anchor="middle">env.ROOM.idFromName("Xq3…f9A")</text>
+        <text class="d-text halo" x="460" y="204" text-anchor="middle">same name → same object</text>
+      </svg>
     </div>
+    <p class="small dim">
+      Cloudflare decides where the Room runs, normally near whoever reached it first. The other player's
+      traffic crosses Cloudflare's own network to get there. Nobody has to say in advance where a game lives.
+    </p>
+    <p>
+      There is no "create" call. <code>env.ROOM.idFromName(name)</code> turns any string into an ID, and
+      <code>env.ROOM.get(id)</code> returns a <em>stub</em>, a local handle for talking to that object. The
+      first request to reach a name brings the object into existence; if it has stored anything, it finds
+      that data again the next time it wakes. Farboard adds its own rule on top: only the host's first join,
+      marked <code>create: true</code>, may save a new room. A guest who arrives at a room with no stored
+      record is told the game does not exist.
+    </p>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="invite" aria-labelledby="invite-h">
+    <span class="eyebrow">The invite</span>
+    <h2 id="invite-h">One secret gives the room's name and the encryption key</h2>
+    <p>
+      The two players have to agree on a room name without any server introducing them, and the relay should
+      not be able to read their moves. Both come from a single random value in the invite link.
+    </p>
+
+    <div class="diagram scroll">
+      <svg viewBox="0 0 920 250" role="img" aria-labelledby="inv-title inv-desc">
+        <title id="inv-title">Deriving the room id and key from the invite secret</title>
+        <desc id="inv-desc">A random 128-bit secret travels in the invite link's fragment. Each browser runs HKDF twice on it: once to get the room id, which is sent to the relay, and once to get an AES-GCM key, which never leaves the device.</desc>
+        <defs>
+          <marker id="i-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path class="d-arrow" d="M0,0 L10,5 L0,10 z" />
+          </marker>
+        </defs>
+
+        <rect class="d-group" x="16" y="16" width="560" height="218" rx="12" />
+        <text class="d-label" x="30" y="38">IN EACH PLAYER'S BROWSER · public/js/netcrypto.js</text>
+
+        <rect class="d-box key" x="32" y="86" width="176" height="96" rx="10" />
+        <text class="d-title" x="46" y="112">Invite secret</text>
+        <text class="d-text" x="46" y="134">16 random bytes, in</text>
+        <text class="d-code" x="46" y="154">#join=&lt;secret&gt;</text>
+        <text class="d-text" x="46" y="172">never sent to a server</text>
+
+        <rect class="d-box" x="316" y="56" width="236" height="68" rx="10" />
+        <text class="d-title" x="330" y="82">roomId</text>
+        <text class="d-code" x="330" y="104">HKDF(secret, "room")</text>
+
+        <rect class="d-box" x="316" y="150" width="236" height="68" rx="10" />
+        <text class="d-title" x="330" y="176">key (AES-256-GCM)</text>
+        <text class="d-code" x="330" y="198">HKDF(secret, "key")</text>
+
+        <path class="d-line" d="M208 118 C 262 118, 262 90, 314 90" marker-end="url(#i-arr)" />
+        <path class="d-line" d="M208 150 C 262 150, 262 184, 314 184" marker-end="url(#i-arr)" />
+
+        <rect class="d-cf" x="620" y="36" width="284" height="110" rx="14" />
+        <text class="d-label" x="636" y="60">SENT TO THE RELAY</text>
+        <text class="d-code" x="636" y="86">/v1/rooms/&lt;roomId&gt;</text>
+        <text class="d-text" x="636" y="110">A name for the room. The key</text>
+        <text class="d-text" x="636" y="128">cannot be worked out from it.</text>
+        <path class="d-line" d="M552 90 L 618 90" marker-end="url(#i-arr)" />
+
+        <text class="d-label" x="636" y="180">STAYS ON THE DEVICE</text>
+        <text class="d-text" x="636" y="202">Seals every move before it is sent,</text>
+        <text class="d-text" x="636" y="220">and opens every move that arrives.</text>
+        <path class="d-line" d="M552 184 L 618 184" marker-end="url(#i-arr)" />
+      </svg>
+    </div>
+
+    <ul class="plain">
+      <li>
+        <strong>Why the fragment?</strong> Browsers never include the part of a URL after <code>#</code> in
+        requests. Opening <code>https://…/#join=SECRET&amp;relay=…</code> fetches the page, while the
+        secret stays in the browser. The app then removes it from the address bar.
+      </li>
+      <li>
+        <strong>Why HKDF?</strong> It is a standard way to derive several independent values from one secret
+        (<a href="https://www.rfc-editor.org/rfc/rfc5869">RFC 5869</a>). The same secret always gives the
+        same outputs, so the host and guest compute the same room ID and the same key without sending either
+        to anyone.
+      </li>
+      <li>
+        <strong>What the relay sees:</strong> the room ID, IP addresses, timing, and base64 ciphertext.
+        AES-GCM also detects tampering, so the relay can neither read a move nor alter one. All it stores
+        per game is two seat-token hashes, a creation time and a message counter. The moves themselves
+        live on the two devices.
+      </li>
+    </ul>
   </section>
 
   <!-- ============================================================ -->
   <section id="game" aria-labelledby="game-h">
     <span class="eyebrow">Life of a game</span>
     <h2 id="game-h">What one game actually triggers</h2>
+    <p>
+      Cost is what shaped the choices above: one object per game keeps the relay to a single service, and
+      hibernation means a game costs almost nothing while both players think. This section and the next
+      three put numbers on that.
+    </p>
     <p>
       The counts assume a typical game: 40 moves each (80 plies) over about 25 minutes, both
       tabs on screen, and one reconnect per player (a phone going to sleep, say). They are worked out
@@ -666,7 +918,7 @@
       <a href="https://upstash.com/pricing/redis">Upstash Redis pricing</a>.
     </p>
     <p>Farboard's own numbers are estimates from <code>relay/src/room.js</code>, <code>relay/src/budget.js</code>, <code>relay/src/index.js</code> and <code>public/js/relayclient.js</code>.</p>
-    <p>New to Cloudflare? <a href="multiplayer.html">How online play works</a> explains Workers, Durable Objects and how two players are paired, step by step.</p>
+    <p><a href="implementation.html">Implementation</a>: the messages, the WebSocket details, pseudo code and the real code behind this design.</p>
   </footer>
 </div>
 
