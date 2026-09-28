@@ -178,7 +178,6 @@
   ul.plain { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; max-width: 72ch; }
   ul.links { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
   ul.links li span { color: var(--dim); font-size: 14px; }
-  footer { font-size: 13px; color: var(--dim); display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--border); padding-top: 20px; }
 
   @media (max-width: 720px) {
     header.hero { grid-template-columns: 1fr; }
@@ -187,6 +186,7 @@
     th, td { padding: 8px 10px; }
   }
 </style>
+<link rel="stylesheet" href="../css/footer.css" />
 </head>
 <body>
 <div class="page">
@@ -821,18 +821,32 @@ npx wrangler deploy                                                   <span clas
     </div>
   </section>
 
-  <footer>
-    <p>
-      Farboard's own code:
-      <a href="https://github.com/EMRahman/Farboard/blob/main/wrangler.jsonc">wrangler.jsonc</a>,
-      <a href="https://github.com/EMRahman/Farboard/blob/main/relay/src/index.js">relay/src/index.js</a>,
-      <a href="https://github.com/EMRahman/Farboard/blob/main/relay/src/room.js">relay/src/room.js</a>,
-      <a href="https://github.com/EMRahman/Farboard/blob/main/relay/src/rules.js">relay/src/rules.js</a>,
-      <a href="https://github.com/EMRahman/Farboard/blob/main/public/js/netcrypto.js">public/js/netcrypto.js</a> and
-      <a href="https://github.com/EMRahman/Farboard/blob/main/public/js/relayclient.js">public/js/relayclient.js</a>.
-    </p>
-    <p><a href="architecture.html">Architecture</a>: the pieces, why they were chosen, what one game costs, and the alternatives.</p>
-    <p><a href="https://github.com/EMRahman/Farboard" target="_blank" rel="noopener">Farboard on GitHub</a> · Source code, setup instructions and issues.</p>
+  <details class="sources-notes">
+    <summary>Sources and notes</summary>
+    <div class="sources-content">
+      <p>
+        Farboard's own code:
+        <a href="https://github.com/EMRahman/Farboard/blob/main/wrangler.jsonc">wrangler.jsonc</a>,
+        <a href="https://github.com/EMRahman/Farboard/blob/main/relay/src/index.js">relay/src/index.js</a>,
+        <a href="https://github.com/EMRahman/Farboard/blob/main/relay/src/room.js">relay/src/room.js</a>,
+        <a href="https://github.com/EMRahman/Farboard/blob/main/relay/src/rules.js">relay/src/rules.js</a>,
+        <a href="https://github.com/EMRahman/Farboard/blob/main/public/js/netcrypto.js">public/js/netcrypto.js</a> and
+        <a href="https://github.com/EMRahman/Farboard/blob/main/public/js/relayclient.js">public/js/relayclient.js</a>.
+      </p>
+    </div>
+  </details>
+
+  <footer class="site-footer">
+    <div class="footer-top">
+      <a href="../">← Play Farboard</a>
+      <a href="https://github.com/EMRahman/Farboard" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span><span class="footer-sr-only"> (opens in a new tab)</span></a>
+    </div>
+    <nav class="footer-links" aria-label="Guides">
+      <a href="architecture.html">Architecture</a>
+      <a href="implementation.html" aria-current="page">Implementation</a>
+      <a href="alternatives.html">Alternatives</a>
+      <a href="economics.html">Economics</a>
+    </nav>
   </footer>
 </div>
 </body>
