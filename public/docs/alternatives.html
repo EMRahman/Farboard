@@ -201,7 +201,8 @@
       </div>
       <nav class="toc" aria-label="On this page">
         <a href="#needs">What the relay must do</a>
-        <a href="#paths">How a move travels</a>
+        <a href="#connections">Opening connections</a>
+        <a href="#paths">Sending a move</a>
         <a href="#options">The four designs</a>
         <a href="#compare">Side by side</a>
         <a href="#webrtc">Why not WebRTC</a>
@@ -233,14 +234,125 @@
   </section>
 
   <!-- ============================================================ -->
-  <section id="paths" aria-labelledby="paths-h">
-    <span class="eyebrow">The whole picture</span>
-    <h2 id="paths-h">How one move travels in each design</h2>
+  <section id="connections" aria-labelledby="connections-h">
+    <span class="eyebrow">1. Opening connections</span>
+    <h2 id="connections-h">Both phones contact the server</h2>
+    <p>
+      Phone A creates a game and shares an invite link or QR code. When Phone B opens it,
+      B loads the page and initiates its own connection to join the same game.
+      A also initiates its own connection. The invite gives B the details it needs to join.
+    </p>
+    <p class="small dim">
+      <strong>Read the arrows:</strong> each arrow points from the phone opening a connection
+      (or sending a setup request) to the service receiving it. The Cloudflare arrow from Worker
+      to Room shows routing. Page downloads and server responses are omitted.
+    </p>
+    <div class="diagram scroll" tabindex="0" role="region" aria-label="Connection setup in four designs; scroll horizontally on small screens">
+      <svg viewBox="0 0 920 724" role="img" aria-labelledby="connect-title connect-desc">
+        <title id="connect-title">Connection setup in four designs</title>
+        <desc id="connect-desc">Phone A and Phone B each contact the services themselves. In WebRTC, both contact signalling and STUN services and can request TURN relay candidates, then test paths with ICE. For a VPS, both open sockets to your server. For AWS, both open sockets to API Gateway. For Cloudflare, both send WebSocket upgrades to the Worker, which routes them to the same Room.</desc>
+        <defs>
+          <marker id="connect-plain" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path class="d-arrow" d="M0,0 L10,5 L0,10 z" />
+          </marker>
+          <marker id="connect-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path class="d-arrow warn" d="M0,0 L10,5 L0,10 z" />
+          </marker>
+        </defs>
+        <text class="d-title" x="24" y="50" text-anchor="start">WebRTC</text>
+        <text class="d-text" x="24" y="73" text-anchor="start">contact setup services</text>
+        <rect class="d-box" x="200" y="84" width="100" height="48" rx="10" />
+        <text class="d-name" x="250" y="112" text-anchor="middle">Phone A</text>
+        <rect class="d-box" x="780" y="84" width="100" height="48" rx="10" />
+        <text class="d-name" x="830" y="112" text-anchor="middle">Phone B</text>
+        <rect class="d-box" x="450" y="20" width="200" height="40" rx="10" />
+        <text class="d-name" x="550" y="44" text-anchor="middle">Signalling server</text>
+        <rect class="d-box" x="450" y="88" width="200" height="40" rx="10" />
+        <text class="d-name" x="550" y="112" text-anchor="middle">STUN server</text>
+        <rect class="d-box fallback" x="450" y="156" width="200" height="40" rx="10" />
+        <text class="d-name" x="550" y="180" text-anchor="middle">TURN relay</text>
+        <path class="d-line setup" d="M300 96 L448 40" marker-end="url(#connect-plain)" />
+        <path class="d-line setup" d="M780 96 L652 40" marker-end="url(#connect-plain)" />
+        <path class="d-line setup" d="M300 108 L448 108" marker-end="url(#connect-plain)" />
+        <path class="d-line setup" d="M780 108 L652 108" marker-end="url(#connect-plain)" />
+        <path class="d-line fallback" d="M300 120 L448 176" marker-end="url(#connect-warn)" />
+        <path class="d-line fallback" d="M780 120 L652 176" marker-end="url(#connect-warn)" />
+        <text class="d-text" x="550" y="220" text-anchor="middle">Then both peers test candidate paths (ICE).</text>
+        <line class="d-rule" x1="16" y1="244" x2="904" y2="244" />
+        <text class="d-title" x="24" y="294" text-anchor="start">VPS relay</text>
+        <text class="d-text" x="24" y="317" text-anchor="start">open WebSockets</text>
+        <rect class="d-box" x="200" y="274" width="100" height="48" rx="10" />
+        <text class="d-name" x="250" y="302" text-anchor="middle">Phone A</text>
+        <rect class="d-box" x="780" y="274" width="100" height="48" rx="10" />
+        <text class="d-name" x="830" y="302" text-anchor="middle">Phone B</text>
+        <rect class="d-box" x="450" y="266" width="200" height="64" rx="10" />
+        <text class="d-name" x="550" y="291" text-anchor="middle">Your server</text>
+        <text class="d-text" x="550" y="311" text-anchor="middle">holds both sockets</text>
+        <path class="d-line" d="M300 298 L448 298" marker-end="url(#connect-plain)" />
+        <path class="d-line" d="M780 298 L652 298" marker-end="url(#connect-plain)" />
+        <line class="d-rule" x1="16" y1="358" x2="904" y2="358" />
+        <text class="d-title" x="24" y="408" text-anchor="start">AWS serverless</text>
+        <text class="d-text" x="24" y="431" text-anchor="start">open WebSockets</text>
+        <rect class="d-box" x="200" y="388" width="100" height="48" rx="10" />
+        <text class="d-name" x="250" y="416" text-anchor="middle">Phone A</text>
+        <rect class="d-box" x="780" y="388" width="100" height="48" rx="10" />
+        <text class="d-name" x="830" y="416" text-anchor="middle">Phone B</text>
+        <rect class="d-box" x="450" y="380" width="200" height="64" rx="10" />
+        <text class="d-name" x="550" y="405" text-anchor="middle">API Gateway</text>
+        <text class="d-text" x="550" y="425" text-anchor="middle">holds both sockets</text>
+        <path class="d-line" d="M300 412 L448 412" marker-end="url(#connect-plain)" />
+        <path class="d-line" d="M780 412 L652 412" marker-end="url(#connect-plain)" />
+        <text class="d-text" x="550" y="468" text-anchor="middle">The backend records the room and connection IDs.</text>
+        <line class="d-rule" x1="16" y1="490" x2="904" y2="490" />
+        <text class="d-title" x="24" y="540" text-anchor="start">Cloudflare</text>
+        <text class="d-text" x="24" y="563" text-anchor="start">open WebSockets</text>
+        <rect class="d-box" x="200" y="520" width="100" height="48" rx="10" />
+        <text class="d-name" x="250" y="548" text-anchor="middle">Phone A</text>
+        <rect class="d-box" x="780" y="520" width="100" height="48" rx="10" />
+        <text class="d-name" x="830" y="548" text-anchor="middle">Phone B</text>
+        <rect class="d-box" x="450" y="512" width="200" height="64" rx="10" />
+        <text class="d-name" x="550" y="537" text-anchor="middle">Worker</text>
+        <text class="d-text" x="550" y="557" text-anchor="middle">routes each upgrade</text>
+        <path class="d-line" d="M300 544 L448 544" marker-end="url(#connect-plain)" />
+        <path class="d-line" d="M780 544 L652 544" marker-end="url(#connect-plain)" />
+        <path class="d-line" d="M550 576 L550 638" marker-end="url(#connect-plain)" />
+        <text class="d-text" x="565" y="613" text-anchor="start">same room ID</text>
+        <rect class="d-box key" x="430" y="640" width="240" height="64" rx="10" />
+        <text class="d-name" x="550" y="665" text-anchor="middle">Room · one per game</text>
+        <text class="d-text" x="550" y="685" text-anchor="middle">accepts both sockets</text>
+      </svg>
+    </div>
+    <p class="small dim">
+      <strong>WebRTC:</strong> signalling carries offers, answers and candidate addresses in both directions.
+      STUN helps discover a public address; TURN supplies a relay path if a direct path cannot be used
+      (orange dashed arrows). ICE tests the candidate paths between peers; those checks are omitted here.
+      See <a href="https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Connectivity">WebRTC connectivity</a>.
+    </p>
+    <p class="small dim">
+      For the three WebSocket designs, each phone opens a connection that can then carry messages
+      in both directions. Farboard's full <a href="implementation.html#sequence">joining sequence</a>
+      shows the requests and replies over time.
+    </p>
+  </section>
 
-    <div class="diagram scroll">
+  <!-- ============================================================ -->
+  <section id="paths" aria-labelledby="paths-h">
+    <span class="eyebrow">2. Sending a move</span>
+    <h2 id="paths-h">An example move from Phone A to Phone B</h2>
+    <p>
+      Both players are now connected. Phone A plays <code>e2 → e4</code> and sends the encrypted move.
+      The arrows below follow that message to Phone B over the connections already established.
+      When B plays, the message travels back the other way.
+    </p>
+    <p class="small dim">
+      <strong>Read the arrows:</strong> green shows the move being delivered; orange dashed arrows show
+      the alternative TURN route. In AWS, grey arrows show the lookup and delivery calls needed to forward it.
+    </p>
+
+    <div class="diagram scroll" tabindex="0" role="region" aria-label="Example move delivery in four designs; scroll horizontally on small screens">
       <svg viewBox="0 0 920 552" role="img" aria-labelledby="paths-title paths-desc">
         <title id="paths-title">How a move travels in four designs</title>
-        <desc id="paths-desc">WebRTC sends moves directly between phones after a signalling server introduces them, with a TURN relay as fallback. A VPS relay passes moves through one server you run. AWS passes each move through API Gateway, a Lambda function and a DynamoDB lookup. Cloudflare passes each move through a Worker to one Durable Object per game, which holds both players' connections.</desc>
+        <desc id="paths-desc">WebRTC sends the move directly from Phone A to Phone B, or through TURN if a relay path was selected. A VPS relay passes moves through one server you run. AWS invokes Lambda for the move; Lambda looks up the peer in DynamoDB and asks API Gateway to deliver it. Cloudflare passes the move directly through the Room holding both existing sockets; the Worker only routes the initial connection.</desc>
         <defs>
           <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path class="d-arrow" d="M0,0 L10,5 L0,10 z" />
@@ -255,24 +367,19 @@
 
         <!-- Lane 1: WebRTC (top 16) -->
         <text class="d-title" x="24" y="52">WebRTC</text>
-        <text class="d-text" x="24" y="74">peer-to-peer, plus two</text>
-        <text class="d-text" x="24" y="92">servers to make it work</text>
+        <text class="d-text" x="24" y="74">direct or relayed</text>
+        <text class="d-text" x="24" y="92">after setup</text>
         <rect class="d-box" x="200" y="56" width="100" height="48" rx="10" />
         <text class="d-name" x="250" y="84" text-anchor="middle">Phone A</text>
         <rect class="d-box" x="780" y="56" width="100" height="48" rx="10" />
         <text class="d-name" x="830" y="84" text-anchor="middle">Phone B</text>
-        <rect class="d-box" x="470" y="20" width="160" height="34" rx="8" />
-        <text class="d-name" x="550" y="42" text-anchor="middle">Signalling server</text>
         <rect class="d-box fallback" x="470" y="100" width="160" height="30" rx="8" />
         <text class="d-name" x="550" y="120" text-anchor="middle">TURN relay</text>
-        <path class="d-line setup" d="M300 62 L468 37" marker-end="url(#arr)" />
-        <path class="d-line setup" d="M632 37 L778 62" marker-end="url(#arr)" />
         <path class="d-line ws" d="M300 80 L778 80" marker-end="url(#arr-ws)" />
         <path class="d-line fallback" d="M300 98 L468 115" marker-end="url(#arr-warn)" />
         <path class="d-line fallback" d="M632 115 L778 98" marker-end="url(#arr-warn)" />
         <text class="d-label" x="540" y="72" text-anchor="middle">direct, if the networks allow</text>
-        <text class="d-text" x="316" y="44">introduce</text>
-        <text class="d-warn" x="330" y="128">if direct fails</text>
+        <text class="d-warn" x="330" y="128">relay path selected</text>
 
         <line class="d-rule" x1="16" y1="146" x2="904" y2="146" />
 
@@ -306,13 +413,14 @@
         <text class="d-name" x="685" y="344" text-anchor="middle">DynamoDB</text>
         <rect class="d-box" x="780" y="316" width="100" height="48" rx="10" />
         <text class="d-name" x="830" y="344" text-anchor="middle">Phone B</text>
-        <path class="d-line" d="M300 340 L328 340" marker-end="url(#arr)" />
+        <path class="d-line ws" d="M300 340 L328 340" marker-end="url(#arr-ws)" />
         <path class="d-line" d="M450 332 L488 332" marker-end="url(#arr)" />
         <path class="d-line" d="M490 348 L452 348" marker-end="url(#arr)" />
-        <path class="d-line" d="M590 340 L628 340" marker-end="url(#arr)" />
-        <path class="d-line" d="M390 364 L390 392 L830 392 L830 366" marker-end="url(#arr)" />
+        <path class="d-line" d="M590 332 L628 332" marker-end="url(#arr)" />
+        <path class="d-line" d="M630 348 L592 348" marker-end="url(#arr)" />
+        <path class="d-line ws" d="M390 364 L390 392 L830 392 L830 366" marker-end="url(#arr-ws)" />
         <text class="d-text" x="609" y="308" text-anchor="middle">find the peer</text>
-        <text class="d-text" x="600" y="386">PostToConnection</text>
+        <text class="d-text" x="600" y="386">delivery over B’s open socket</text>
 
         <line class="d-rule" x1="16" y1="414" x2="904" y2="414" />
 
@@ -320,23 +428,25 @@
         <text class="d-title" x="24" y="454">Cloudflare</text>
         <text class="d-text" x="24" y="476">one object per game</text>
         <text class="d-label" x="24" y="498">CHOSEN</text>
-        <rect class="d-cf" x="326" y="428" width="428" height="108" rx="14" />
-        <text class="d-label" x="340" y="448">CLOUDFLARE · FREE PLAN</text>
         <rect class="d-box" x="200" y="462" width="100" height="48" rx="10" />
         <text class="d-name" x="250" y="490" text-anchor="middle">Phone A</text>
-        <rect class="d-box" x="344" y="462" width="110" height="48" rx="10" />
-        <text class="d-name" x="399" y="490" text-anchor="middle">Worker</text>
-        <rect class="d-box key" x="506" y="456" width="228" height="64" rx="10" />
-        <text class="d-name" x="620" y="482" text-anchor="middle">Room · one per game</text>
-        <text class="d-text" x="620" y="502" text-anchor="middle">holds both players' sockets</text>
         <rect class="d-box" x="780" y="462" width="100" height="48" rx="10" />
         <text class="d-name" x="830" y="490" text-anchor="middle">Phone B</text>
-        <path class="d-line ws" d="M300 486 L342 486" marker-end="url(#arr-ws)" />
-        <path class="d-line ws" d="M454 486 L504 486" marker-end="url(#arr-ws)" />
-        <path class="d-line ws" d="M734 486 L778 486" marker-end="url(#arr-ws)" />
+        <rect class="d-box key" x="450" y="454" width="200" height="64" rx="10" />
+        <text class="d-name" x="550" y="479" text-anchor="middle">Room · one per game</text>
+        <text class="d-text" x="550" y="499" text-anchor="middle">holds both sockets</text>
+        <path class="d-line ws" d="M300 486 L448 486" marker-end="url(#arr-ws)" />
+        <path class="d-line ws" d="M650 486 L778 486" marker-end="url(#arr-ws)" />
       </svg>
     </div>
     <p class="small dim">
+      <strong>AWS:</strong> API Gateway invokes Lambda. Lambda looks up B’s connection ID in DynamoDB,
+      then calls <code>PostToConnection</code> on API Gateway to deliver the move over B’s existing socket.
+      <a href="https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api-overview.html">AWS WebSocket API overview</a>.
+    </p>
+    <p class="small dim">
+      <strong>Cloudflare:</strong> the Worker routes the initial upgrade; subsequent messages are handled
+      by the Room over its accepted sockets. See <a href="https://developers.cloudflare.com/durable-objects/best-practices/websockets/">Cloudflare WebSockets</a>.
       The Cloudflare lane has the same shape as the VPS lane: one thing in the middle holds both players.
       The difference is that Cloudflare runs it, one per game, and puts it to sleep between moves.
     </p>
