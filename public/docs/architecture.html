@@ -212,7 +212,6 @@
     border-radius: 0 8px 8px 0; font-size: 15px;
   }
   ul.plain { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; max-width: 72ch; }
-  footer { font-size: 13px; color: var(--dim); display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--border); padding-top: 20px; }
 
   @media (max-width: 720px) {
     header.hero { grid-template-columns: 1fr; }
@@ -226,6 +225,7 @@
   }
   @media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
 </style>
+<link rel="stylesheet" href="../css/footer.css" />
 </head>
 <body>
 <div class="page">
@@ -910,20 +910,34 @@
     </p>
   </section>
 
-  <footer>
-    <p>
-      Prices and allowances checked on 26 September 2026 from
-      <a href="https://developers.cloudflare.com/workers/platform/pricing/">Workers pricing</a>,
-      <a href="https://developers.cloudflare.com/durable-objects/platform/pricing/">Durable Objects pricing</a>,
-      <a href="https://aws.amazon.com/api-gateway/pricing/">API Gateway pricing</a>,
-      <a href="https://vercel.com/pricing">Vercel pricing</a>,
-      <a href="https://vercel.com/docs/functions/websockets">Vercel WebSockets</a>,
-      <a href="https://vercel.com/docs/functions/limitations">Vercel Functions limits</a> and
-      <a href="https://upstash.com/pricing/redis">Upstash Redis pricing</a>.
-    </p>
-    <p>Farboard's own numbers are estimates from <code>relay/src/room.js</code>, <code>relay/src/budget.js</code>, <code>relay/src/index.js</code> and <code>public/js/relayclient.js</code>.</p>
-    <p><a href="implementation.html">Implementation</a>: the messages, the WebSocket details, pseudo code and the real code behind this design.</p>
-    <p><a href="https://github.com/EMRahman/Farboard" target="_blank" rel="noopener">Farboard on GitHub</a> · Source code, setup instructions and issues.</p>
+  <details class="sources-notes">
+    <summary>Sources and notes</summary>
+    <div class="sources-content">
+      <p>
+        Prices and allowances checked on 26 September 2026 from
+        <a href="https://developers.cloudflare.com/workers/platform/pricing/">Workers pricing</a>,
+        <a href="https://developers.cloudflare.com/durable-objects/platform/pricing/">Durable Objects pricing</a>,
+        <a href="https://aws.amazon.com/api-gateway/pricing/">API Gateway pricing</a>,
+        <a href="https://vercel.com/pricing">Vercel pricing</a>,
+        <a href="https://vercel.com/docs/functions/websockets">Vercel WebSockets</a>,
+        <a href="https://vercel.com/docs/functions/limitations">Vercel Functions limits</a> and
+        <a href="https://upstash.com/pricing/redis">Upstash Redis pricing</a>.
+      </p>
+      <p>Farboard's own numbers are estimates from <code>relay/src/room.js</code>, <code>relay/src/budget.js</code>, <code>relay/src/index.js</code> and <code>public/js/relayclient.js</code>.</p>
+    </div>
+  </details>
+
+  <footer class="site-footer">
+    <div class="footer-top">
+      <a href="../">← Play Farboard</a>
+      <a href="https://github.com/EMRahman/Farboard" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span><span class="footer-sr-only"> (opens in a new tab)</span></a>
+    </div>
+    <nav class="footer-links" aria-label="Guides">
+      <a href="architecture.html" aria-current="page">Architecture</a>
+      <a href="implementation.html">Implementation</a>
+      <a href="alternatives.html">Alternatives</a>
+      <a href="economics.html">Economics</a>
+    </nav>
   </footer>
 </div>
 

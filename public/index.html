@@ -19,6 +19,7 @@
     />
     <title>Farboard — play chess with a friend, near or far</title>
     <link rel="stylesheet" href="css/styles.css" />
+    <link rel="stylesheet" href="css/footer.css" />
     <link
       rel="icon"
       href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♞</text></svg>"
@@ -338,17 +339,18 @@
       </div>
     </div>
 
-    <footer class="app-footer">
-      <p>
-        Moves are end-to-end encrypted: the relay passes them along but cannot read them.
-      </p>
-      <p>
-        Playing over a real board?
-        <a href="https://emrahman.github.io/ChessTracker/" target="_blank" rel="noopener">Try ChessTracker</a>
-        to follow the game on screen.
-      </p>
-      <p>How it is built: <a href="docs/architecture.html">Architecture</a> · <a href="docs/implementation.html">Implementation</a> · <a href="docs/alternatives.html">Design alternatives</a> · <a href="docs/economics.html">Economics</a></p>
-      <p><a href="https://github.com/EMRahman/Farboard" target="_blank" rel="noopener">Farboard on GitHub</a> · Source code, setup instructions and issues.</p>
+    <footer class="app-footer site-footer">
+      <div class="footer-intro">
+        <p>Moves are end-to-end encrypted.</p>
+        <p>Playing on a real board? <a href="https://emrahman.github.io/ChessTracker/" target="_blank" rel="noopener">Try ChessTracker</a>.</p>
+      </div>
+      <nav class="footer-links" aria-label="Guides and source code">
+        <a href="docs/architecture.html">Architecture</a>
+        <a href="docs/implementation.html">Implementation</a>
+        <a href="docs/alternatives.html">Alternatives</a>
+        <a href="docs/economics.html">Economics</a>
+        <a href="https://github.com/EMRahman/Farboard" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span><span class="footer-sr-only"> (opens in a new tab)</span></a>
+      </nav>
     </footer>
 
     <script src="js/config.js"></script>
