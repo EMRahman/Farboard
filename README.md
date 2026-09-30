@@ -26,8 +26,9 @@ follows a game played with real pieces on one device.
   draw, or, once a game is over, ask for a rematch (colours swap). Either side
   can resign.
 - **Names.** Enter a name when you host or join. The guest sees "John would
-  like to play" before joining, and each player's name replaces "Opponent"
-  on the board. Your name is remembered on your device for next time.
+  like to play" before joining, and your opponent's name replaces "Opponent"
+  on the board (your own side stays "You"). Your name is remembered on your
+  device for next time.
 - **Chat while you play.** Messages show as `John: good luck!`. On a wide
   screen the chat sits beside the board; on a phone a bar under the board shows
   the latest message and opens a slide-up sheet that keeps the board in view
