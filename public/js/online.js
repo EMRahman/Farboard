@@ -90,7 +90,9 @@
   var house = null; // { url, public } once found; see findHouse
   var houseSearch = null;
   // Chat on this device: items are { who: 'me' | 'peer' | 'sys', text }.
-  var chat = { items: [], bucket: null, inBucket: null, strikes: 0, unread: 0, visible: true };
+  // visible: the chat card is on screen (desktop); sheetOpen: the phone's sheet is up.
+  var chat = { items: [], bucket: null, inBucket: null, strikes: 0, unread: 0, visible: true, sheetOpen: false };
+  var PHONE = window.matchMedia('(max-width: 860px)');
 
   /* -------------------------------------------------------------- storage */
 
@@ -250,6 +252,7 @@
       app.setOnline(null);
       el.onlineCard.hidden = true;
       chat.items = [];
+      setSheet(false);
       writeJson(CHAT_KEY, null);
       renderChat();
       document.title = baseTitle;
@@ -462,20 +465,21 @@
         if (!body) return;
         session.lastSeen = plain.n;
         persist();
-        handle(body);
+        handle(body, plain.n);
       })
       .catch(function (err) {
         console.warn('[online] ignored a message:', err && err.message);
       });
   }
 
-  function handle(body) {
+  function handle(body, n) {
     if (body.t === 'sync') adopt(body.state, false);
     else if (body.t === 'move') receiveMove(body);
     else if (body.t === 'request') receiveRequest(body);
     else if (body.t === 'reply') receiveReply(body);
     else if (body.t === 'hello') receiveHello(body);
-    else if (body.t === 'chat') receiveChat(body);
+    else if (body.t === 'chat') receiveChat(body, n);
+    else if (body.t === 'ack') receiveAck(body);
   }
 
   /* Merge a state the other side sent into ours (see protocol.mergeState). */
@@ -588,8 +592,10 @@
     chat.unread = 0;
   }
 
-  function addLine(who, text) {
-    chat.items = Chat.addToHistory(chat.items, { who: who, text: text });
+  function addLine(who, text, extra) {
+    var item = { who: who, text: text };
+    if (extra) item.n = extra.n;
+    chat.items = Chat.addToHistory(chat.items, item);
     writeJson(CHAT_KEY, { id: session.seatToken, items: chat.items });
     renderChatLog();
     renderChatMeta();
@@ -616,7 +622,7 @@
     session.chatSent += 1;
     persist();
     send({ t: 'chat', text: text });
-    addLine('me', text);
+    addLine('me', text, { n: session.sendN });
     return true;
   }
 
@@ -626,7 +632,7 @@
   }
 
   /* The receiver enforces the limits too: the sender's app is not trusted. */
-  function receiveChat(body) {
+  function receiveChat(body, n) {
     if (session.chatMuted) return;
     chatCounts();
     if (session.chatRecv >= CL.sendCap) return;
@@ -646,11 +652,27 @@
     session.chatRecv += 1;
     persist();
     addLine('peer', text);
-    if (document.hidden || !chat.visible) {
+    // Tells the sender it arrived; only messages we accepted are confirmed.
+    if (typeof n === 'number') send({ t: 'ack', n: n });
+    if (document.hidden || !chatSeen()) {
       chat.unread += 1;
       renderUnread();
       nudge(chat.unread === 1 ? 'New message' : chat.unread + ' new messages');
     }
+  }
+
+  /* The other side accepted our message number n. */
+  function receiveAck(body) {
+    var changed = false;
+    chat.items.forEach(function (item) {
+      if (item.who === 'me' && item.n === body.n && !item.ok) {
+        item.ok = true;
+        changed = true;
+      }
+    });
+    if (!changed) return;
+    writeJson(CHAT_KEY, { id: session.seatToken, items: chat.items });
+    renderChatLog();
   }
 
   function toggleMute() {
@@ -672,7 +694,8 @@
   function renderChatLog() {
     if (!active || !session) return;
     var log = el.chatLog;
-    var atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+    var atBottom = nearBottom();
+    var before = log.childElementCount;
     log.replaceChildren();
     if (!chat.items.length) {
       var empty = document.createElement('li');
@@ -692,10 +715,21 @@
         name.textContent = (item.who === 'me' ? myName() || 'You' : peerName()) + ':';
         line.appendChild(name);
         line.appendChild(document.createTextNode(' ' + item.text));
+        if (item.ok) {
+          var tick = document.createElement('span');
+          tick.className = 'chat-tick';
+          tick.textContent = ' ✓';
+          tick.title = 'Delivered';
+          line.appendChild(tick);
+        }
       }
       log.appendChild(line);
     });
-    if (atBottom) log.scrollTop = log.scrollHeight;
+    var added = log.childElementCount > before;
+    var last = chat.items[chat.items.length - 1];
+    if (atBottom || (added && last && last.who === 'me')) log.scrollTop = log.scrollHeight;
+    // Something new below while reading further up: offer a way down.
+    else if (added && last && last.who === 'peer') el.chatNewBtn.hidden = false;
     renderPeek();
   }
 
@@ -739,8 +773,52 @@
     el.chatNote.textContent = text;
   }
 
+  function nearBottom() {
+    var log = el.chatLog;
+    return log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+  }
+
+  /* Is the chat in front of the reader: the card on a wide screen, the sheet on a phone. */
+  function chatSeen() {
+    return PHONE.matches ? chat.sheetOpen : chat.visible;
+  }
+
+  /* ---- the phone's sheet: it rises over the lower page, the board shrinks to stay clear */
+
+  function fitSheet() {
+    var vv = window.visualViewport;
+    var height = vv ? vv.height : window.innerHeight;
+    // How much of the screen the on-screen keyboard covers.
+    var keyboard = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
+    var root = document.documentElement.style;
+    root.setProperty('--vvh', height + 'px');
+    root.setProperty('--kb', keyboard + 'px');
+    document.body.classList.toggle('keyboard-up', keyboard > 100);
+    // Measured after the keyboard class, which changes the sheet's height.
+    root.setProperty('--sheet-h', el.chatCard.offsetHeight + 'px');
+  }
+
+  function setSheet(open) {
+    open = open && PHONE.matches && active;
+    chat.sheetOpen = open;
+    document.body.classList.toggle('chat-open', open);
+    if (!open) document.body.classList.remove('keyboard-up');
+    el.chatPeek.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) {
+      fitSheet();
+      window.scrollTo(0, 0);
+      el.chatLog.scrollTop = el.chatLog.scrollHeight;
+      el.chatNewBtn.hidden = true;
+      el.chatCloseBtn.focus({ preventScroll: true });
+    } else if (document.activeElement && el.chatCard.contains(document.activeElement)) {
+      document.activeElement.blur();
+      el.chatPeek.focus({ preventScroll: true });
+    }
+    seenChat();
+  }
+
   function seenChat() {
-    if (chat.visible && !document.hidden && chat.unread) {
+    if (chatSeen() && !document.hidden && chat.unread) {
       chat.unread = 0;
       renderUnread();
     }
@@ -763,16 +841,39 @@
       el.chatInput.focus({ preventScroll: true });
     });
     // Esc leaves the box; it must not also clear the board's selection.
-    el.chatInput.addEventListener('keydown', function (event) {
+    el.chatCard.addEventListener('keydown', function (event) {
       if (event.key === 'Escape') {
         event.stopPropagation();
-        el.chatInput.blur();
+        if (chat.sheetOpen) setSheet(false);
+        else el.chatInput.blur();
       }
     });
     on(el.chatMuteBtn, toggleMute);
     on(el.chatPeek, function () {
-      el.chatCard.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      el.chatInput.focus({ preventScroll: true });
+      setSheet(!chat.sheetOpen);
+    });
+    // Esc closes the sheet from anywhere, not only while focus is inside it.
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && chat.sheetOpen) setSheet(false);
+    });
+    on(el.chatCloseBtn, function () {
+      setSheet(false);
+    });
+    on(el.chatNewBtn, function () {
+      el.chatLog.scrollTop = el.chatLog.scrollHeight;
+      el.chatNewBtn.hidden = true;
+    });
+    el.chatLog.addEventListener('scroll', function () {
+      if (nearBottom()) el.chatNewBtn.hidden = true;
+    });
+    // The keyboard and rotation change the room the sheet has.
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', function () {
+        if (chat.sheetOpen) fitSheet();
+      });
+    }
+    PHONE.addEventListener('change', function () {
+      setSheet(false);
     });
     if (window.IntersectionObserver) {
       new IntersectionObserver(
@@ -1449,6 +1550,8 @@
       'chatForm',
       'chatInput',
       'chatSendBtn',
+      'chatCloseBtn',
+      'chatNewBtn',
       'chatNote',
       'chatPeek',
       'chatPeekText',

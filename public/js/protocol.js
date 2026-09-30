@@ -310,6 +310,8 @@
           body.name.length <= 200 &&
           (body.caps === undefined || (Array.isArray(body.caps) && body.caps.length <= 8))
         );
+      case 'ack':
+        return isCount(body.n);
       case 'chat':
         return typeof body.text === 'string' && body.text.length > 0 && body.text.length <= 2000;
       case 'reply':
