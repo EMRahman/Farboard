@@ -597,7 +597,7 @@
     if (extra) item.n = extra.n;
     chat.items = Chat.addToHistory(chat.items, item);
     writeJson(CHAT_KEY, { id: session.seatToken, items: chat.items });
-    renderChatLog();
+    renderChatLog(who);
     renderChatMeta();
   }
 
@@ -691,11 +691,11 @@
     renderChatMeta();
   }
 
-  function renderChatLog() {
+  /* newWho: who a just-added line is from, or undefined when nothing was added. */
+  function renderChatLog(newWho) {
     if (!active || !session) return;
     var log = el.chatLog;
     var atBottom = nearBottom();
-    var before = log.childElementCount;
     log.replaceChildren();
     if (!chat.items.length) {
       var empty = document.createElement('li');
@@ -725,11 +725,9 @@
       }
       log.appendChild(line);
     });
-    var added = log.childElementCount > before;
-    var last = chat.items[chat.items.length - 1];
-    if (atBottom || (added && last && last.who === 'me')) log.scrollTop = log.scrollHeight;
+    if (atBottom || newWho === 'me') log.scrollTop = log.scrollHeight;
     // Something new below while reading further up: offer a way down.
-    else if (added && last && last.who === 'peer') el.chatNewBtn.hidden = false;
+    else if (newWho === 'peer') el.chatNewBtn.hidden = false;
     renderPeek();
   }
 
