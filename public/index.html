@@ -76,6 +76,12 @@
           <div class="lead" aria-live="polite"></div>
           <p class="board-toast" id="boardToast" role="status" aria-live="polite" hidden></p>
         </div>
+
+        <button type="button" class="chat-peek" id="chatPeek" hidden>
+          <span aria-hidden="true">💬</span>
+          <span class="chat-peek-text" id="chatPeekText">Chat</span>
+          <span class="chat-badge" id="chatPeekBadge" hidden></span>
+        </button>
       </section>
 
       <aside class="side-panel">
@@ -91,6 +97,10 @@
                 <label><input type="radio" name="hostColor" value="b" /> Black</label>
                 <label><input type="radio" name="hostColor" value="random" /> Random</label>
               </fieldset>
+              <label class="name-field">
+                <span>Your name</span>
+                <input type="text" id="hostNameInput" class="field" maxlength="20" autocomplete="nickname" spellcheck="false" placeholder="Shown to your opponent" />
+              </label>
               <button type="button" class="btn btn-primary" id="createInviteBtn">Create invite</button>
               <p class="form-message bad" id="hostError" role="alert"></p>
 
@@ -173,6 +183,22 @@
             <button type="button" class="btn small" id="leaveBtn">Leave game</button>
           </div>
         </div>
+
+        <section class="chat-card" id="chatCard" aria-label="Chat" hidden>
+          <div class="chat-head">
+            <h2>Chat</h2>
+            <span class="chat-badge" id="chatBadge" hidden></span>
+            <button type="button" class="btn small" id="chatMuteBtn" aria-pressed="false">Mute</button>
+          </div>
+          <ol class="chat-log" id="chatLog" role="log" aria-live="polite" aria-relevant="additions" aria-label="Chat messages"></ol>
+          <div class="chat-chips" id="chatChips"></div>
+          <form class="chat-form" id="chatForm" autocomplete="off">
+            <label class="visually-hidden" for="chatInput">Message</label>
+            <input type="text" id="chatInput" maxlength="280" enterkeyhint="send" autocomplete="off" autocapitalize="sentences" placeholder="Message" />
+            <button type="submit" class="btn btn-primary" id="chatSendBtn">Send</button>
+          </form>
+          <p class="chat-note" id="chatNote" role="status"></p>
+        </section>
 
         <div class="status-card game-only">
           <p class="status-line" id="status" role="status">White to move</p>
@@ -324,7 +350,12 @@
         </section>
 
         <section class="modal-panel" data-panel="join" hidden>
+          <p class="join-who" id="joinWho">Someone would like to play.</p>
           <p>Join the game hosted through <strong id="joinRelayName"></strong>?</p>
+          <label class="name-field">
+            <span>Your name</span>
+            <input type="text" id="joinNameInput" class="field" maxlength="20" autocomplete="nickname" spellcheck="false" placeholder="Shown to your opponent" />
+          </label>
           <p class="modal-note">
             Moves are end-to-end encrypted: the relay passes them along but cannot read them.
           </p>
@@ -357,6 +388,7 @@
     <script src="js/chess.js"></script>
     <script src="js/netcrypto.js"></script>
     <script src="js/protocol.js"></script>
+    <script src="js/chat.js"></script>
     <script src="js/vendor/qrcode.js"></script>
     <script src="js/app.js"></script>
     <script src="js/relayclient.js"></script>

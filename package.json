@@ -4,7 +4,7 @@
   "description": "Play chess with a friend on another device, anywhere: an invite link or QR code, end-to-end encrypted, through a relay on Cloudflare's free plan.",
   "private": true,
   "scripts": {
-    "test": "node test/engine.test.js && node test/protocol.test.js && node test/netcrypto.test.js && node relay/test/rules.test.js",
+    "test": "node test/engine.test.js && node test/protocol.test.js && node test/netcrypto.test.js && node test/chat.test.js && node relay/test/rules.test.js",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "start": "python3 -m http.server 8000 --directory public"

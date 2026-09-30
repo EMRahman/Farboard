@@ -304,6 +304,14 @@
         return isCount(body.rev) && isCount(body.ply) && decodeMove(body.m) !== null;
       case 'request':
         return isToken(body.id) && REQUEST_KINDS.indexOf(body.kind) !== -1;
+      case 'hello':
+        return (
+          typeof body.name === 'string' &&
+          body.name.length <= 200 &&
+          (body.caps === undefined || (Array.isArray(body.caps) && body.caps.length <= 8))
+        );
+      case 'chat':
+        return typeof body.text === 'string' && body.text.length > 0 && body.text.length <= 2000;
       case 'reply':
         return (
           isToken(body.id) &&
@@ -363,8 +371,10 @@
     return origin.replace(/^http/, 'ws') + '/v1/rooms/' + roomId;
   }
 
-  function inviteLink(base, secret, relayOrigin) {
-    return base + '#join=' + secret + '&relay=' + encodeURIComponent(relayLabel(relayOrigin));
+  /* `name` is the host's, shown to the guest before they join: "John would like to play". */
+  function inviteLink(base, secret, relayOrigin, name) {
+    var link = base + '#join=' + secret + '&relay=' + encodeURIComponent(relayLabel(relayOrigin));
+    return name ? link + '&name=' + encodeURIComponent(name) : link;
   }
 
   function setupLink(base, relayOrigin, ownerKey) {
@@ -394,7 +404,12 @@
 
     if (params.has('join')) {
       var secret = params.get('join');
-      return /^[A-Za-z0-9_-]{22}$/.test(secret) ? { join: { secret: secret, relay: relay } } : null;
+      if (!/^[A-Za-z0-9_-]{22}$/.test(secret)) return null;
+      var join = { secret: secret, relay: relay };
+      // Unchecked text from a link: the caller cleans it before showing it.
+      var name = params.get('name');
+      if (name && name.length <= 200) join.name = name;
+      return { join: join };
     }
     if (params.has('relay-setup')) {
       var key = params.get('key');
