@@ -96,7 +96,10 @@ free allowance.
   room's creation time and its message count for the day.
 - **Chess-sized limits**: frames up to 16 KB, about 3 messages a second per
   connection, 5,000 messages per room per day, six connections per room at
-  most. Keep-alive pings count too, so nothing can spend the day's requests
+  most. Chat messages and their delivery confirmations are sealed frames like
+  moves, so they count too; the relay cannot tell them apart, which is why the
+  chat caps (150 messages per player per game) are enforced by the players'
+  apps rather than here. Keep-alive pings count too, so nothing can spend the day's requests
   faster than games of chess would. A room nobody has spoken in for a week is
   deleted.
 - **Hibernates between moves**, so an idle game uses nothing, and the app only

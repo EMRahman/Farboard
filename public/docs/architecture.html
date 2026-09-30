@@ -552,7 +552,7 @@
     <h2 id="invite-h">One secret gives the room's name and the encryption key</h2>
     <p>
       The two players have to agree on a room name without any server introducing them, and the relay should
-      not be able to read their moves. Both come from a single random value in the invite link.
+      not be able to read their moves or their chat. Both come from a single random value in the invite link.
     </p>
 
     <div class="diagram scroll">
@@ -613,9 +613,10 @@
       </li>
       <li>
         <strong>What the relay sees:</strong> the room ID, IP addresses, timing, and base64 ciphertext.
-        AES-GCM also detects tampering, so the relay can neither read a move nor alter one. All it stores
-        per game is two seat-token hashes, a creation time and a message counter. The moves themselves
-        live on the two devices.
+        AES-GCM also detects tampering, so the relay can neither read a move or a chat message nor alter one.
+        All it stores per game is two seat-token hashes, a creation time and a message counter. The moves
+        and the chat live on the two devices. Players' names are not sent to the relay either: a host's name
+        rides in the invite's <code>#fragment</code>, and after that inside sealed messages.
       </li>
     </ul>
   </section>
@@ -704,7 +705,7 @@
           Each HTTP request, RPC call or alarm that reaches a Durable Object. Incoming WebSocket messages
           count too, but at a 20:1 ratio: 20 messages cost 1 request.
         </p>
-        <p class="example">A game's ~156 incoming messages (moves, pings, syncs) count as about 8 requests.</p>
+        <p class="example">A game's ~156 incoming messages (moves, pings, syncs) count as about 8 requests. Chat adds one incoming message per chat message plus one delivery confirmation. Even a game that uses the whole chat allowance (150 messages each, so 300 messages and 300 confirmations) adds about 30 requests.</p>
       </div>
       <div class="card">
         <div class="term"><h3>GB-second (duration)</h3><span class="allow">13,000 GB-s / day</span></div>
