@@ -1225,6 +1225,102 @@ body.hide-coords .coord {
   }
 }
 
+.chat-log-wrap {
+  position: relative;
+}
+
+.chat-new {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #10140b;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.chat-tick {
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.chat-close {
+  display: none;
+}
+
+/* On phones the chat is a sheet that rises from the bottom when the bar under
+   the board is tapped. It sits above the on-screen keyboard (--kb), and the
+   board shrinks to stay in view above it (--vvh and --sheet-h come from the
+   visual viewport, see online.js). */
+@media (max-width: 860px) {
+  .chat-close {
+    display: inline-flex;
+  }
+
+  .chat-card {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: var(--kb, 0px);
+    z-index: 30;
+    box-sizing: border-box;
+    width: min(100vw, 560px);
+    margin: 0 auto;
+    border-radius: 14px 14px 0 0;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.5);
+    transform: translateY(110%);
+    visibility: hidden;
+    transition: transform 0.2s ease, visibility 0s linear 0.2s;
+  }
+
+  .chat-card[hidden] {
+    display: none;
+  }
+
+  body.chat-open .chat-card {
+    transform: none;
+    visibility: visible;
+    transition: transform 0.2s ease;
+  }
+
+  .chat-log {
+    height: 96px;
+  }
+
+  .chat-note:empty {
+    display: none;
+  }
+
+  /* Chatting: the board, its two strips and the sheet are all that is needed. */
+  body.chat-open {
+    --board-size: max(140px, min(94vw, calc(var(--vvh, 100svh) - var(--sheet-h, 300px) - 130px), 520px));
+  }
+
+  body.chat-open .app-header,
+  body.chat-open .app-footer,
+  body.chat-open .chat-peek {
+    display: none;
+  }
+
+  /* With the keyboard up, quick replies make way for the box. */
+  body.chat-open.keyboard-up .chat-chips,
+  body.chat-open.keyboard-up .chat-note {
+    display: none;
+  }
+
+  body.chat-open.keyboard-up .chat-log {
+    height: 64px;
+  }
+}
+
 /* ------------------------------------------------------------- responsive */
 
 @media (max-width: 860px) {

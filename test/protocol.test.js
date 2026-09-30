@@ -337,5 +337,12 @@ test('a chat sent by our own role is still reflected away', function () {
   assert.strictEqual(P.unwrap(plain, 'guest', 1), null);
 });
 
+test('an ack names the message it confirms', function () {
+  assert.ok(P.validBody({ t: 'ack', n: 4 }));
+  assert.ok(!P.validBody({ t: 'ack' }));
+  assert.ok(!P.validBody({ t: 'ack', n: -1 }));
+  assert.ok(!P.validBody({ t: 'ack', n: '4' }));
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed\n');
 process.exit(failed ? 1 : 0);

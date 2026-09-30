@@ -26,8 +26,10 @@ follows a game played with real pieces on one device.
   draw, or, once a game is over, ask for a rematch (colours swap). Either side
   can resign.
 - **Names and chat.** Enter a name when you host or join; the guest sees
-  "John would like to play" before joining. A chat sits beside the board (and
-  under it on phones) with one-tap replies, mute, and unread markers. Each
+  "John would like to play" before joining. A chat sits beside the board (or
+  a slide-up sheet on phones that keeps the board in view above the keyboard)
+  with one-tap replies, mute, unread markers, a "New messages" pill and a ✓
+  when your message has arrived. Each
   player may send 150 messages of up to 280 characters per game, at a
   human pace; a rematch starts fresh, and the last 100 messages are kept on
   the device only. Chat is not saved for an opponent who is offline.

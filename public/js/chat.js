@@ -97,7 +97,11 @@
         );
       })
       .map(function (item) {
-        return { who: item.who, text: cleanText(item.text, LIMITS.textMax) };
+        var clean = { who: item.who, text: cleanText(item.text, LIMITS.textMax) };
+        // Our own messages remember which of them the other side confirmed.
+        if (item.who === 'me' && typeof item.n === 'number') clean.n = item.n;
+        if (item.who === 'me' && item.ok === true) clean.ok = true;
+        return clean;
       })
       .filter(function (item) {
         return item.text;

@@ -77,7 +77,7 @@
           <p class="board-toast" id="boardToast" role="status" aria-live="polite" hidden></p>
         </div>
 
-        <button type="button" class="chat-peek" id="chatPeek" hidden>
+        <button type="button" class="chat-peek" id="chatPeek" aria-controls="chatCard" aria-expanded="false" hidden>
           <span aria-hidden="true">💬</span>
           <span class="chat-peek-text" id="chatPeekText">Chat</span>
           <span class="chat-badge" id="chatPeekBadge" hidden></span>
@@ -189,8 +189,12 @@
             <h2>Chat</h2>
             <span class="chat-badge" id="chatBadge" hidden></span>
             <button type="button" class="btn small" id="chatMuteBtn" aria-pressed="false">Mute</button>
+            <button type="button" class="btn small chat-close" id="chatCloseBtn">Close</button>
           </div>
-          <ol class="chat-log" id="chatLog" role="log" aria-live="polite" aria-relevant="additions" aria-label="Chat messages"></ol>
+          <div class="chat-log-wrap">
+            <ol class="chat-log" id="chatLog" role="log" aria-live="polite" aria-relevant="additions" aria-label="Chat messages"></ol>
+            <button type="button" class="chat-new" id="chatNewBtn" hidden>New messages ↓</button>
+          </div>
           <div class="chat-chips" id="chatChips"></div>
           <form class="chat-form" id="chatForm" autocomplete="off">
             <label class="visually-hidden" for="chatInput">Message</label>

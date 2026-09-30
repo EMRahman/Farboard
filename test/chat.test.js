@@ -103,5 +103,18 @@ test('saved history is checked and cleaned when read back', function () {
   assert.deepStrictEqual(Chat.validHistory('nope'), []);
 });
 
+test('saved history keeps which of our messages were confirmed', function () {
+  var saved = [
+    { who: 'me', text: 'a', n: 3, ok: true },
+    { who: 'me', text: 'b', n: 'x', ok: 'yes' },
+    { who: 'peer', text: 'c', n: 9, ok: true }
+  ];
+  assert.deepStrictEqual(Chat.validHistory(saved), [
+    { who: 'me', text: 'a', n: 3, ok: true },
+    { who: 'me', text: 'b' },
+    { who: 'peer', text: 'c' }
+  ]);
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed\n');
 process.exit(failed ? 1 : 0);
