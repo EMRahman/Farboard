@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Farboard Implementation</title>
-<meta name="description" content="How Farboard's online play is coded: the Cloudflare configuration, the messages between two browsers and the relay, WebSocket hibernation, close codes, pseudo code and the real code." />
+<meta name="description" content="How Farboard's online play is coded: the Cloudflare configuration, the messages between two browsers and the relay, WebSocket hibernation, close codes, names and chat, pseudo code and the real code." />
 <style>
   :root {
     --bg: #eef0e6;
@@ -205,12 +205,14 @@
         <span class="fact">wrangler.jsonc</span>
         <span class="fact">WebSocket Hibernation API</span>
         <span class="fact">Close codes</span>
+        <span class="fact">Names and chat</span>
         <span class="fact">Pseudo code and real code</span>
       </div>
       <nav class="toc" aria-label="On this page">
         <a href="#config">Configuration</a>
         <a href="#sequence">Message by message</a>
         <a href="#websockets">WebSockets</a>
+        <a href="#chat">Names and chat</a>
         <a href="#pseudo">Pseudo code</a>
         <a href="#code">The real code</a>
         <a href="#details">Details</a>
@@ -464,7 +466,7 @@ server.addEventListener('message', (e) =&gt; {
           <tr><td><code>{"t":"joined", proto, seat, peer, peerLeft}</code></td><td>Room → browser</td><td>no</td><td>Seat granted, and whether the other player is connected or has left for good.</td></tr>
           <tr><td><code>{"t":"peer", online, left?}</code></td><td>Room → browser</td><td>no</td><td>The other player connected, disconnected, or left the game for good.</td></tr>
           <tr><td><code>ping</code> → <code>pong</code></td><td>browser → Room → browser</td><td>no</td><td>Keep-alive: checks the line still works.</td></tr>
-          <tr><td>base64url string, e.g. <code>k3Jd9…</code></td><td>browser → Room → other browser</td><td>yes, AES-GCM</td><td>Moves, state syncs, take-back and draw requests. Forwarded unchanged.</td></tr>
+          <tr><td>base64url string, e.g. <code>k3Jd9…</code></td><td>browser → Room → other browser</td><td>yes, AES-GCM</td><td>Moves, state syncs, take-back and draw requests, names, chat messages and delivery confirmations. Forwarded unchanged; the Room cannot tell them apart.</td></tr>
           <tr><td><code>{"t":"leave"}</code></td><td>browser → Room</td><td>no</td><td>Leaving the game for good. The seat is closed to this player.</td></tr>
         </tbody>
       </table>
@@ -480,8 +482,8 @@ server.addEventListener('message', (e) =&gt; {
     </p>
     <p>
       The Room answers pings in <code>webSocketMessage</code> like any other frame, so pings go through the
-      same per-socket rate limit and the room's daily message allowance. Pings are counted like moves, so
-      the app sends as few as it can, and none while the tab is hidden.
+      same per-socket rate limit and the room's daily message allowance. Pings are counted like moves (and like
+      chat messages), so the app sends as few as it can, and none while the tab is hidden.
     </p>
 
     <div class="diagram scroll">
@@ -567,6 +569,98 @@ server.addEventListener('message', (e) =&gt; {
       <li><code>relay/src/index.js</code>: checks the upgrade header, the page's origin and the room ID, then passes the request to the Room.</li>
       <li><code>relay/src/room.js</code>: <code>WebSocketPair</code>, <code>acceptWebSocket</code>, attachments, and the three hibernation handlers.</li>
       <li><code>relay/src/rules.js</code>: close codes, the frame size limit, the rate limit, and the socket and message caps.</li>
+    </ul>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="chat" aria-labelledby="chat-h">
+    <span class="eyebrow">Names and chat</span>
+    <h2 id="chat-h">Talking while you play, over the same sealed channel</h2>
+    <p>
+      Chat needs no new relay code. Every chat message is a sealed frame like a move, so the Room forwards it
+      without knowing what it is. The rules live in the browsers: <code>public/js/chat.js</code> decides what a
+      name or message may look like and how much one player may send, and <code>online.js</code> does the
+      talking. Like <code>protocol.js</code>, <code>chat.js</code> has no sockets, storage or page code, so its
+      tests run in plain Node.
+    </p>
+
+    <h3>Who is playing</h3>
+    <p>
+      The guest sees "John would like to play" before joining, which is before any encrypted channel exists. So
+      the host's name is added to the invite link's fragment (<code>#join=…&amp;relay=…&amp;name=John</code>), which
+      no server ever receives. That name is only a hint: anyone holding the link could have edited it. Once
+      both devices are connected, each sends a sealed <code>hello</code> with its own name, and that one is
+      believed. If the two differ, the chat says so.
+    </p>
+
+    <h3>The sealed message bodies for names and chat</h3>
+    <p>
+      Every sealed message is <code>{v, from, n, body}</code>. <code>from</code> is the sender's role and
+      <code>n</code> only goes up, so a message cannot be reflected back or replayed. The chat label
+      ("John:") comes from that verified <code>from</code>, never from anything in the message.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Body</th><th>Sent when</th><th>Meaning</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>{"t":"hello", name, caps:["chat"]}</code></td><td>each time the other player connects</td><td>Who I am, and that this app supports chat. An older app ignores it, and the chat box then says the other version cannot chat yet.</td></tr>
+          <tr><td><code>{"t":"chat", text}</code></td><td>a message is sent</td><td>One line of text. Shown as plain text only.</td></tr>
+          <tr><td><code>{"t":"ack", n}</code></td><td>a chat message was accepted</td><td>Confirms message number <code>n</code>. The sender shows a ✓. Messages that were refused are not confirmed.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Chat never touches the game state that moves and requests share, so nothing said in chat can change
+      the board. The Room does not queue messages for a player who is away, so the app checks the other
+      player is connected before sending and says "Not delivered" instead of dropping the message quietly.
+    </p>
+
+    <h3>Limits, checked on both sides</h3>
+    <p>
+      The relay's rate limit and daily allowance apply to chat like any frame, but it cannot see which frames
+      are chat. So the players' apps enforce the chat limits, and the receiving app enforces them too, because
+      it cannot trust the sender's app to.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Limit</th><th>Value</th><th>Where</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Name length</td><td>20 characters</td><td>cleaned on send and on receive</td></tr>
+          <tr><td>Message length</td><td>280 characters</td><td>cleaned on send and on receive</td></tr>
+          <tr><td>Messages sent per player per game</td><td>150; a rematch is a new game and starts again</td><td>sender stops; receiver ignores the excess</td></tr>
+          <tr><td>Pace</td><td>a burst of 5, then one a second (8 on the receiving side, so lag never trips it)</td><td>token bucket on both sides</td></tr>
+          <tr><td>Flooding</td><td>five refused messages and the sender is muted automatically</td><td>receiver</td></tr>
+          <tr><td>History kept</td><td>the last 100 lines, on this device only, cleared when you leave</td><td>own <code>localStorage</code> key</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Making text safe to show</h3>
+    <ul class="plain">
+      <li>Text is shown with <code>textContent</code>, never as HTML, and links are not made clickable. The page's Content Security Policy already forbids inline script.</li>
+      <li><code>cleanText()</code> turns line breaks and control characters into spaces, removes zero-width and direction-changing characters (which can make text read backwards or hide it), keeps the joiners emoji need, collapses spaces, and cuts to the limit in characters rather than UTF-16 units. That is also why the inputs have no <code>maxlength</code> attribute, which would count units and stop emoji early.</li>
+      <li>Names that could pass for the app or the reader ("You", "System", "Farboard", "Opponent") are refused, and an opponent with your own name is shown as "Sam (opponent)".</li>
+      <li>A name is a claim, not an identity. The invite link is what proves someone should be there, so a link that reaches the wrong person can put a stranger in the chat. That is what Mute and Leave are for.</li>
+    </ul>
+
+    <h3>On a phone</h3>
+    <p>
+      The chat is below the board, out of sight, so a bar under the board shows the latest message and an
+      unread count, and opens the chat as a sheet. The sheet sits above the on-screen keyboard (read from
+      <code>visualViewport</code>) and the board shrinks to stay in view above it. Quick replies hide while the
+      keyboard is up to make room.
+    </p>
+
+    <h3>Where the chat code lives</h3>
+    <ul class="plain">
+      <li><code>public/js/chat.js</code>: cleaning, limits, the rate-limit bucket and saved history. Tested by <code>test/chat.test.js</code>.</li>
+      <li><code>public/js/protocol.js</code>: <code>hello</code>, <code>chat</code> and <code>ack</code> in <code>validBody()</code>, and the host's name in <code>inviteLink()</code> and <code>parseLink()</code>.</li>
+      <li><code>public/js/online.js</code>: sending and receiving, the receiver's limits, mute, acknowledgements, unread counts and the phone sheet.</li>
+      <li><code>relay/</code>: nothing. The relay is unchanged.</li>
     </ul>
   </section>
 

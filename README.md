@@ -25,14 +25,22 @@ follows a game played with real pieces on one device.
 - **Requests the opponent answers**: ask to take back your last move, offer a
   draw, or, once a game is over, ask for a rematch (colours swap). Either side
   can resign.
-- **Names and chat.** Enter a name when you host or join; the guest sees
-  "John would like to play" before joining. A chat sits beside the board (or
-  a slide-up sheet on phones that keeps the board in view above the keyboard)
-  with one-tap replies, mute, unread markers, a "New messages" pill and a ✓
-  when your message has arrived. Each
-  player may send 150 messages of up to 280 characters per game, at a
-  human pace; a rematch starts fresh, and the last 100 messages are kept on
-  the device only. Chat is not saved for an opponent who is offline.
+- **Names.** Enter a name when you host or join. The guest sees "John would
+  like to play" before joining, and your opponent's name replaces "Opponent"
+  on the board (your own side stays "You"). Your name is remembered on your
+  device for next time.
+- **Chat while you play.** Messages show as `John: good luck!`. On a wide
+  screen the chat sits beside the board; on a phone a bar under the board shows
+  the latest message and opens a slide-up sheet that keeps the board in view
+  above the keyboard. One-tap replies (👍, "Good luck!", "Good game", "One
+  sec…") save typing. A ✓ shows when a message has arrived, a "New messages"
+  pill appears if you have scrolled back, and unread messages are counted on
+  the bar and in the tab title. **Mute** hides your opponent's messages.
+- **Chat limits.** Messages are up to 280 characters. Each player may send 150
+  per game (a rematch starts a fresh allowance), at a human pace: a burst of 5,
+  then one a second. The last 100 messages are kept on your device only, and
+  chat is not held for an opponent who is offline: you are told it was not
+  delivered.
 - **Game events show on the board**: your opponent's move, their requests and
   their answers, so you see them without looking away.
 - **Move list** in standard notation (`e4`, `Nf3`, `O-O`, `exd5`, `hxg8=Q+`).
@@ -113,8 +121,8 @@ look on AWS or Vercel. It is served with the site from
 
 **[Implementation](https://farboard.ehsanr-web.workers.dev/docs/implementation)**
 shows how it is coded: `wrangler.jsonc`, a message-by-message sequence, the
-WebSocket handshake, hibernation API and close codes, pseudo code and the real
-code. It is served from
+WebSocket handshake, hibernation API and close codes, how names and chat ride
+the same sealed channel, pseudo code and the real code. It is served from
 [`public/docs/implementation.html`](public/docs/implementation.html).
 
 **[Design alternatives](https://farboard.ehsanr-web.workers.dev/docs/alternatives)**
@@ -162,7 +170,7 @@ app walks you through it under **Get your own copy**.
 | `Home` / `End` | Jump to the start / the latest move |
 | `Ctrl`+`Z` | Ask to take back your last move |
 | `F` | Flip the board |
-| `Esc` | Clear the current selection |
+| `Esc` | Clear the current selection, or close the chat sheet on a phone |
 
 ## Tests
 
@@ -176,7 +184,8 @@ npm test
 ```
 
 The same command runs the online protocol tests (what the app accepts from the
-other device), the encryption tests, and the relay's rules.
+other device), the encryption tests, the chat rules (cleaning, limits, rate
+limiting, history), and the relay's rules.
 
 ## Layout
 
