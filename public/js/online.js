@@ -24,17 +24,23 @@
  *   farboard:relay:v1   { url, key, verified }  an owner key that works
  *   farboard:draft:v1   the key made up for a copy not yet deployed
  *   farboard:online:v1  the online game in progress, if any
+ *   farboard:name:v1    the name last used, offered again next time
+ *   farboard:chat:v1    the chat of the game in progress (see chat.js)
  */
 (function () {
   'use strict';
 
   var P = window.ChessProtocol;
   var C = window.NetCrypto;
+  var Chat = window.ChatRules;
+  var CL = Chat.LIMITS;
   var RelayClient = window.RelayClient;
 
   var SESSION_KEY = 'farboard:online:v1';
   var RELAY_KEY = 'farboard:relay:v1';
   var DRAFT_KEY = 'farboard:draft:v1';
+  var NAME_KEY = 'farboard:name:v1';
+  var CHAT_KEY = 'farboard:chat:v1';
 
   var CONFIG = window.FarboardConfig || {};
   var SHARED_RELAY = P.normalizeRelay(CONFIG.sharedRelay);
@@ -59,6 +65,11 @@
    *   seatToken  proves to the relay which seat is ours when we reconnect
    *   sendN      counter on messages we send; lastSeen, on theirs
    *   state      the shared game (see protocol.js), null until the guest hears
+   *   name, peerName   the two players' names ('' if none); peerVerified is
+   *              true once the name has come over the sealed channel rather
+   *              than from the invite link, which anyone could have edited
+   *   peerChat   the other side's app supports chat
+   *   chatGame, chatSent, chatRecv, chatMuted   chat allowance for this game
    */
   var session = null;
   var active = false; // the board is showing the online game
@@ -78,6 +89,8 @@
   var sharedStats = null; // the house relay's last /v1/stats answer
   var house = null; // { url, public } once found; see findHouse
   var houseSearch = null;
+  // Chat on this device: items are { who: 'me' | 'peer' | 'sys', text }.
+  var chat = { items: [], bucket: null, inBucket: null, strikes: 0, unread: 0, visible: true };
 
   /* -------------------------------------------------------------- storage */
 
@@ -113,7 +126,12 @@
       typeof s.sendN === 'number' &&
       typeof s.lastSeen === 'number' &&
       (s.state === null || P.validState(s.state));
-    return ok ? s : null;
+    if (!ok) return null;
+    s.name = Chat.cleanName(s.name);
+    s.peerName = Chat.cleanName(s.peerName);
+    s.chatSent = s.chatSent > 0 ? s.chatSent : 0;
+    s.chatRecv = s.chatRecv > 0 ? s.chatRecv : 0;
+    return s;
   }
 
   /* The relay this device hosts on, once it has been checked. */
@@ -171,6 +189,18 @@
     return null;
   }
 
+  function savedName() {
+    var saved = readJson(NAME_KEY);
+    return typeof saved === 'string' ? Chat.cleanName(saved) : '';
+  }
+
+  /* Clean a typed name and keep it for next time. */
+  function rememberName(typed) {
+    var name = Chat.cleanName(typed);
+    if (name) writeJson(NAME_KEY, name);
+    return name;
+  }
+
   function pageBase() {
     return location.origin + location.pathname;
   }
@@ -188,15 +218,25 @@
 
   /* --------------------------------------------------------- the session */
 
+  function myName() {
+    return (session && session.name) || '';
+  }
+
+  function peerName() {
+    return Chat.peerLabel(session && session.peerName, myName());
+  }
+
   /* Show the game on the board and start talking to the relay. */
   function enter() {
     active = true;
+    loadChat();
     pending = null;
     incoming = null;
     homeVisible = false;
     el.homeCard.hidden = true;
     showState();
     el.onlineCard.hidden = false;
+    renderChat();
     connect();
   }
 
@@ -209,6 +249,9 @@
       incoming = null;
       app.setOnline(null);
       el.onlineCard.hidden = true;
+      chat.items = [];
+      writeJson(CHAT_KEY, null);
+      renderChat();
       document.title = baseTitle;
     }
     session = null;
@@ -267,7 +310,8 @@
       color: mine,
       outcome: outcome,
       peerLeft: !!session.peerLeft,
-      canTakeBack: !!s && !s.outcome && !session.peerLeft && !!mine && !!P.takebackPlies(s.moves, mine)
+      canTakeBack: !!s && !s.outcome && !session.peerLeft && !!mine && !!P.takebackPlies(s.moves, mine),
+      peerName: peerName()
     });
   }
 
@@ -359,14 +403,18 @@
       incoming = null;
       persist();
       showState();
-      app.flash('Your opponent left the game.');
+      addLine('sys', peerName() + ' left the game.');
+      app.flash(peerName() + ' left the game.');
       nudge('Your opponent left');
     }
     var arrived = online && !peerOnline;
     peerOnline = online;
     // Every time the other side (re)appears, compare notes; this is also how
     // anything missed while one of us was offline gets caught up.
-    if (online) sendSync();
+    if (online) {
+      sendHello();
+      sendSync();
+    }
     if (arrived && currentPanel === 'invite') {
       el.inviteStatus.textContent = 'Your opponent is here. Have a good game!';
       setTimeout(function () {
@@ -426,6 +474,8 @@
     else if (body.t === 'move') receiveMove(body);
     else if (body.t === 'request') receiveRequest(body);
     else if (body.t === 'reply') receiveReply(body);
+    else if (body.t === 'hello') receiveHello(body);
+    else if (body.t === 'chat') receiveChat(body);
   }
 
   /* Merge a state the other side sent into ours (see protocol.mergeState). */
@@ -486,6 +536,254 @@
     } else if (verdict === 'reject') {
       console.warn('[online] refused a move from the other side', body);
     }
+  }
+
+
+  /* ---------------------------------------------------------------- chat */
+
+  function sendHello() {
+    send({ t: 'hello', name: myName(), caps: ['chat'] });
+  }
+
+  /* Who the other player says they are, sent over the sealed channel. */
+  function receiveHello(body) {
+    var name = Chat.cleanName(body.name);
+    var earlier = session.peerName;
+    var first = !session.peerHello;
+    if (!session.peerVerified && earlier && name && earlier !== name) {
+      addLine('sys', 'The invite said “' + earlier + '”, but they joined as “' + name + '”.');
+    }
+    session.peerName = name;
+    session.peerVerified = true;
+    session.peerHello = true;
+    session.peerChat = Array.isArray(body.caps) && body.caps.indexOf('chat') !== -1;
+    persist();
+    if (first) addLine('sys', peerName() + ' joined.');
+    if (currentPanel === 'invite' && peerOnline) {
+      el.inviteStatus.textContent = peerName() + ' is here. Have a good game!';
+    }
+    boardFlags();
+    renderCard();
+    renderChat();
+  }
+
+  /* The allowance is per game: a rematch is a new game and starts fresh. */
+  function chatCounts() {
+    var game = session.state ? session.state.game : '';
+    if (session.chatGame !== game) {
+      session.chatGame = game;
+      session.chatSent = 0;
+      session.chatRecv = 0;
+      persist();
+    }
+  }
+
+  function loadChat() {
+    var saved = readJson(CHAT_KEY);
+    chat.items = saved && saved.id === session.seatToken ? Chat.validHistory(saved.items) : [];
+    var now = Date.now();
+    chat.bucket = Chat.freshBucket(now, CL.burst);
+    chat.inBucket = Chat.freshBucket(now, CL.inboundBurst);
+    chat.strikes = 0;
+    chat.unread = 0;
+  }
+
+  function addLine(who, text) {
+    chat.items = Chat.addToHistory(chat.items, { who: who, text: text });
+    writeJson(CHAT_KEY, { id: session.seatToken, items: chat.items });
+    renderChatLog();
+    renderChatMeta();
+  }
+
+  /* Returns true if the message went out (the box can then be cleared). */
+  function sendChat(raw) {
+    if (!active || !session) return false;
+    var text = Chat.cleanMessage(raw);
+    if (!text) return false;
+    var who = peerName();
+    if (session.peerLeft) return chatNote(who + ' has left the game.');
+    if (linkStatus !== 'connected' || !peerOnline) {
+      return chatNote('Not delivered: ' + who + ' is offline. Chat is not saved for later.');
+    }
+    if (!session.peerChat) return chatNote(who + '’s version of Farboard does not support chat yet.');
+    chatCounts();
+    if (session.chatSent >= CL.sendCap) {
+      return chatNote('Chat limit for this game reached (' + CL.sendCap + ' messages each). A rematch starts fresh.');
+    }
+    var bucket = Chat.takeToken(chat.bucket, Date.now(), CL.burst);
+    if (!bucket) return chatNote('Slow down a little.');
+    chat.bucket = bucket;
+    session.chatSent += 1;
+    persist();
+    send({ t: 'chat', text: text });
+    addLine('me', text);
+    return true;
+  }
+
+  function chatNote(text) {
+    el.chatNote.textContent = text;
+    return false;
+  }
+
+  /* The receiver enforces the limits too: the sender's app is not trusted. */
+  function receiveChat(body) {
+    if (session.chatMuted) return;
+    chatCounts();
+    if (session.chatRecv >= CL.sendCap) return;
+    var bucket = Chat.takeToken(chat.inBucket, Date.now(), CL.inboundBurst);
+    if (!bucket) {
+      chat.strikes += 1;
+      if (chat.strikes >= CL.strikes) {
+        session.chatMuted = true;
+        persist();
+        addLine('sys', peerName() + ' was sending too fast, so chat is muted.');
+      }
+      return;
+    }
+    chat.inBucket = bucket;
+    var text = Chat.cleanMessage(body.text);
+    if (!text) return;
+    session.chatRecv += 1;
+    persist();
+    addLine('peer', text);
+    if (document.hidden || !chat.visible) {
+      chat.unread += 1;
+      renderUnread();
+      nudge(chat.unread === 1 ? 'New message' : chat.unread + ' new messages');
+    }
+  }
+
+  function toggleMute() {
+    session.chatMuted = !session.chatMuted;
+    if (!session.chatMuted) chat.strikes = 0;
+    persist();
+    renderChatMeta();
+  }
+
+  function renderChat() {
+    var on = active && !!session;
+    el.chatCard.hidden = !on;
+    el.chatPeek.hidden = !on;
+    if (!on) return;
+    renderChatLog();
+    renderChatMeta();
+  }
+
+  function renderChatLog() {
+    if (!active || !session) return;
+    var log = el.chatLog;
+    var atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+    log.replaceChildren();
+    if (!chat.items.length) {
+      var empty = document.createElement('li');
+      empty.className = 'chat-empty';
+      empty.textContent = 'No messages yet.';
+      log.appendChild(empty);
+    }
+    chat.items.forEach(function (item) {
+      var line = document.createElement('li');
+      if (item.who === 'sys') {
+        line.className = 'chat-line sys';
+        line.textContent = item.text;
+      } else {
+        line.className = 'chat-line ' + (item.who === 'me' ? 'mine' : 'theirs');
+        var name = document.createElement('bdi');
+        name.className = 'chat-name';
+        name.textContent = (item.who === 'me' ? myName() || 'You' : peerName()) + ':';
+        line.appendChild(name);
+        line.appendChild(document.createTextNode(' ' + item.text));
+      }
+      log.appendChild(line);
+    });
+    if (atBottom) log.scrollTop = log.scrollHeight;
+    renderPeek();
+  }
+
+  /* The bar under the board on phones: the latest message, and how many are unread. */
+  function renderPeek() {
+    var last = null;
+    chat.items.forEach(function (item) {
+      if (item.who !== 'sys') last = item;
+    });
+    el.chatPeekText.textContent = last
+      ? (last.who === 'me' ? myName() || 'You' : peerName()) + ': ' + last.text
+      : 'Chat';
+    renderUnread();
+  }
+
+  function renderUnread() {
+    [el.chatBadge, el.chatPeekBadge].forEach(function (badge) {
+      badge.hidden = !chat.unread;
+      badge.textContent = chat.unread;
+    });
+  }
+
+  /* Mute button, whether the box can be used, and the line of small print. */
+  function renderChatMeta() {
+    if (!active || !session) return;
+    var closed = !!session.peerLeft;
+    el.chatMuteBtn.textContent = session.chatMuted ? 'Unmute' : 'Mute';
+    el.chatMuteBtn.setAttribute('aria-pressed', session.chatMuted ? 'true' : 'false');
+    el.chatInput.disabled = closed;
+    el.chatSendBtn.disabled = closed;
+    Array.prototype.forEach.call(el.chatChips.children, function (chip) {
+      chip.disabled = closed;
+    });
+    chatCounts();
+    var left = CL.sendCap - session.chatSent;
+    var text = '';
+    if (closed) text = 'Your opponent has left.';
+    else if (session.peerHello && !session.peerChat) text = peerName() + '’s version does not support chat yet.';
+    else if (session.chatMuted) text = 'Chat from ' + peerName() + ' is muted.';
+    else if (left <= 20) text = left + ' message' + (left === 1 ? '' : 's') + ' left this game.';
+    el.chatNote.textContent = text;
+  }
+
+  function seenChat() {
+    if (chat.visible && !document.hidden && chat.unread) {
+      chat.unread = 0;
+      renderUnread();
+    }
+  }
+
+  function bindChat() {
+    Chat.QUICK_REPLIES.forEach(function (text) {
+      var chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'btn small';
+      chip.textContent = text;
+      chip.addEventListener('click', function () {
+        sendChat(text);
+      });
+      el.chatChips.appendChild(chip);
+    });
+    el.chatForm.addEventListener('submit', function (event) {
+      event.preventDefault();
+      if (sendChat(el.chatInput.value)) el.chatInput.value = '';
+      el.chatInput.focus({ preventScroll: true });
+    });
+    // Esc leaves the box; it must not also clear the board's selection.
+    el.chatInput.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        el.chatInput.blur();
+      }
+    });
+    on(el.chatMuteBtn, toggleMute);
+    on(el.chatPeek, function () {
+      el.chatCard.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      el.chatInput.focus({ preventScroll: true });
+    });
+    if (window.IntersectionObserver) {
+      new IntersectionObserver(
+        function (entries) {
+          chat.visible = entries[entries.length - 1].isIntersecting;
+          seenChat();
+        },
+        { threshold: 0.5 }
+      ).observe(el.chatCard);
+    }
+    document.addEventListener('visibilitychange', seenChat);
   }
 
   /* ------------------------------------------------------------ requests */
@@ -698,6 +996,7 @@
     homeVisible = true;
     el.homeCard.hidden = false;
     el.hostError.textContent = typeof message === 'string' ? message : '';
+    el.hostNameInput.value = el.hostNameInput.value || savedName();
     el.hostChecking.hidden = false;
     el.hostReady.hidden = true;
     el.hostOwnerOnly.hidden = true;
@@ -808,7 +1107,10 @@
       seatToken: C.randomToken(16),
       sendN: 0,
       lastSeen: 0,
-      state: P.newState(C.randomToken(9), describeHostColor())
+      state: P.newState(C.randomToken(9), describeHostColor()),
+      name: rememberName(el.hostNameInput.value),
+      peerName: '',
+      peerVerified: false
     };
     persist();
     enter();
@@ -817,7 +1119,7 @@
 
   function showInvite() {
     if (!session) return;
-    var link = P.inviteLink(pageBase(), session.secret, session.relay);
+    var link = P.inviteLink(pageBase(), session.secret, session.relay, session.name);
     el.inviteLink.value = link;
     drawQr(el.inviteQr, link, 'QR code for the invite link');
     el.shareInviteBtn.hidden = !navigator.share;
@@ -835,7 +1137,10 @@
       if (!active) enter();
       return;
     }
+    link.name = Chat.cleanName(link.name || '');
     pendingJoin = link;
+    el.joinWho.textContent = (link.name || 'Someone') + ' would like to play.';
+    el.joinNameInput.value = savedName();
     el.joinRelayName.textContent = P.relayLabel(link.relay);
     el.joinReplaceNote.hidden = !session;
     openModal('join');
@@ -854,7 +1159,10 @@
       seatToken: C.randomToken(16),
       sendN: 0,
       lastSeen: 0,
-      state: null
+      state: null,
+      name: rememberName(el.joinNameInput.value),
+      peerName: link.name,
+      peerVerified: false
     };
     persist();
     closeModal();
@@ -1129,7 +1437,22 @@
       'joinRelayName',
       'joinReplaceNote',
       'joinConfirmBtn',
-      'joinCancelBtn'
+      'joinCancelBtn',
+      'hostNameInput',
+      'joinWho',
+      'joinNameInput',
+      'chatCard',
+      'chatBadge',
+      'chatMuteBtn',
+      'chatLog',
+      'chatChips',
+      'chatForm',
+      'chatInput',
+      'chatSendBtn',
+      'chatNote',
+      'chatPeek',
+      'chatPeekText',
+      'chatPeekBadge'
     ].forEach(function (id) {
       el[id] = document.getElementById(id);
     });
@@ -1231,6 +1554,7 @@
     on(el.inviteAgainBtn, showInvite);
     on(el.leaveBtn, leaveGame);
 
+    bindChat();
     window.addEventListener('hashchange', readAddressBar);
     document.addEventListener('visibilitychange', function () {
       if (!document.hidden) document.title = baseTitle;

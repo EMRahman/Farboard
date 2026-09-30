@@ -25,6 +25,12 @@ follows a game played with real pieces on one device.
 - **Requests the opponent answers**: ask to take back your last move, offer a
   draw, or, once a game is over, ask for a rematch (colours swap). Either side
   can resign.
+- **Names and chat.** Enter a name when you host or join; the guest sees
+  "John would like to play" before joining. A chat sits beside the board (and
+  under it on phones) with one-tap replies, mute, and unread markers. Each
+  player may send 150 messages of up to 280 characters per game, at a
+  human pace; a rematch starts fresh, and the last 100 messages are kept on
+  the device only. Chat is not saved for an opponent who is offline.
 - **Game events show on the board**: your opponent's move, their requests and
   their answers, so you see them without looking away.
 - **Move list** in standard notation (`e4`, `Nf3`, `O-O`, `exd5`, `hxg8=Q+`).
@@ -63,6 +69,12 @@ How it is kept private:
 - A relay is private unless its owner opens it to everyone (up to a daily
   limit); the owner key is never put in an invite. A game has two seats; once
   both are taken, the link is useless to anyone else.
+- Names and chat travel only inside the same sealed channel (a host's name is
+  also in the invite link's `#fragment`, which no server sees). Chat is shown
+  as plain text, cleaned of hidden and direction-changing characters, and the
+  sender's label comes from the verified sender, never from the message. The
+  relay cannot tell chat from moves, so the limits above are enforced by both
+  devices; a peer who floods is muted automatically.
 - Every move from the other device is checked by the rules engine before it is
   shown, and messages that are replayed or reflected back are ignored.
 - The relay only serves its own site (and any copies its owner names), keeps
@@ -174,6 +186,7 @@ public/                     the website, exactly as served
   js/chess.js               the rules engine — no DOM, testable on its own
   js/app.js                 board rendering, tap handling, move list
   js/protocol.js            online play: what messages mean and whether to believe them
+  js/chat.js                names and chat: cleaning, limits, rate limiting, history
   js/netcrypto.js           online play: invite secret, room id, encryption
   js/relayclient.js         online play: the connection to the relay, kept alive
   js/online.js              online play: the session, home card, dialogs and invite QR codes

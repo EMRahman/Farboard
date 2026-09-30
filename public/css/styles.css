@@ -1056,6 +1056,175 @@ body.hide-coords .coord {
   justify-content: center;
 }
 
+/* -------------------------------------------------------------------- chat */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.name-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+.join-who {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.chat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+
+.chat-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-head h2 {
+  margin: 0;
+  font-size: 16px;
+  flex: 1;
+}
+
+.chat-badge {
+  min-width: 20px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #10140b;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.chat-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  height: 190px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.chat-line .chat-name {
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.chat-line.mine .chat-name {
+  color: var(--accent);
+}
+
+.chat-line.sys {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.chat-empty {
+  margin: auto;
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+.chat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chat-chips .btn {
+  min-height: 36px;
+}
+
+.chat-form {
+  display: flex;
+  gap: 8px;
+}
+
+.chat-form input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 10px;
+  background: var(--bg, #1f1d1a);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font: inherit;
+}
+
+.chat-form input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.chat-form .btn {
+  min-height: 44px;
+}
+
+.chat-note {
+  margin: 0;
+  min-height: 1.2em;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+/* On phones the chat sits below the board, out of sight: this bar under the
+   board shows the latest message and jumps to the chat. */
+.chat-peek {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chat-peek-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 860px) {
+  .chat-peek:not([hidden]) {
+    display: flex;
+  }
+}
+
 /* ------------------------------------------------------------- responsive */
 
 @media (max-width: 860px) {

@@ -449,7 +449,7 @@
     var name = color === 'w' ? 'White' : 'Black';
     var live = !!online && !online.outcome && !state.game.isGameOver();
     strip.classList.toggle('to-move', live && state.game.turn() === color);
-    var who = online && online.color ? (online.color === color ? 'You · ' : 'Opponent · ') : '';
+    var who = online && online.color ? (online.color === color ? 'You · ' : (online.peerName || 'Opponent') + ' · ') : '';
     strip.querySelector('.player-name').textContent = who + name;
     strip.querySelector('.dot').className = 'dot ' + (color === 'w' ? 'white' : 'black');
 
@@ -655,7 +655,8 @@
         color: opts.color || null,
         outcome: opts.outcome || null,
         peerLeft: !!opts.peerLeft,
-        canTakeBack: !!opts.canTakeBack
+        canTakeBack: !!opts.canTakeBack,
+        peerName: opts.peerName || ''
       };
       if (colorChanged) state.orientation = online.color || 'w';
       if (colorChanged || outcomeChanged) {

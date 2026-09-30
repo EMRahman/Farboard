@@ -311,5 +311,31 @@ test('broken links parse to nothing', function () {
   assert.strictEqual(P.parseLink('#relay-setup=relay.example.com&key=short'), null);
 });
 
+test('an invite link can carry the host name, which is only a hint', function () {
+  var link = P.inviteLink('https://x.github.io/Farboard/', 'AAAAAAAAAAAAAAAAAAAAAA', 'https://relay.example.com', 'John & Co');
+  assert.strictEqual(P.parseLink(link).join.name, 'John & Co');
+  assert.strictEqual(P.parseLink(link + 'x'.repeat(300)).join.name, undefined);
+});
+
+console.log('\nchat messages');
+
+test('hello and chat bodies are checked', function () {
+  assert.ok(P.validBody({ t: 'hello', name: 'John', caps: ['chat'] }));
+  assert.ok(P.validBody({ t: 'hello', name: '' }));
+  assert.ok(!P.validBody({ t: 'hello', name: 5 }));
+  assert.ok(!P.validBody({ t: 'hello', name: 'a', caps: 'chat' }));
+  assert.ok(P.validBody({ t: 'chat', text: 'hi' }));
+  assert.ok(!P.validBody({ t: 'chat', text: '' }));
+  assert.ok(!P.validBody({ t: 'chat', text: 'x'.repeat(2001) }));
+  assert.ok(!P.validBody({ t: 'chat' }));
+});
+
+test('a chat sent by our own role is still reflected away', function () {
+  var plain = P.wrap('host', 1, { t: 'chat', text: 'hi' });
+  assert.strictEqual(P.unwrap(plain, 'host', 0), null);
+  assert.deepStrictEqual(P.unwrap(plain, 'guest', 0), { t: 'chat', text: 'hi' });
+  assert.strictEqual(P.unwrap(plain, 'guest', 1), null);
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed\n');
 process.exit(failed ? 1 : 0);
