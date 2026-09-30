@@ -165,19 +165,29 @@ h2 {
 
 .captured {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 1px;
   flex: 1;
   min-width: 0;
+  height: 24px;
   overflow: hidden;
 }
 
+/* Every glyph gets the same fixed box, centred, so the differing widths and
+   baselines of the fallback chess fonts (Safari especially) cannot make the
+   row look ragged. The narrow box overlaps the glyphs a little so a full set
+   still fits on a phone. */
 .taken {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 24px;
   font-size: 19px;
   line-height: 1;
-  /* Overlap the glyphs slightly so a full set still fits on a phone. */
-  margin-right: -5px;
+  font-family: 'Segoe UI Symbol', 'Apple Symbols', 'DejaVu Sans', sans-serif;
+  overflow: visible;
 }
 
 .taken.white {
