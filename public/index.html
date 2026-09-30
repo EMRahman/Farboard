@@ -99,7 +99,7 @@
               </fieldset>
               <label class="name-field">
                 <span>Your name</span>
-                <input type="text" id="hostNameInput" class="field" maxlength="20" autocomplete="nickname" spellcheck="false" placeholder="Shown to your opponent" />
+                <input type="text" id="hostNameInput" class="field" autocomplete="nickname" spellcheck="false" placeholder="Shown to your opponent" />
               </label>
               <button type="button" class="btn btn-primary" id="createInviteBtn">Create invite</button>
               <p class="form-message bad" id="hostError" role="alert"></p>
@@ -194,7 +194,7 @@
           <div class="chat-chips" id="chatChips"></div>
           <form class="chat-form" id="chatForm" autocomplete="off">
             <label class="visually-hidden" for="chatInput">Message</label>
-            <input type="text" id="chatInput" maxlength="280" enterkeyhint="send" autocomplete="off" autocapitalize="sentences" placeholder="Message" />
+            <input type="text" id="chatInput" enterkeyhint="send" autocomplete="off" autocapitalize="sentences" placeholder="Message" />
             <button type="submit" class="btn btn-primary" id="chatSendBtn">Send</button>
           </form>
           <p class="chat-note" id="chatNote" role="status"></p>
@@ -354,7 +354,7 @@
           <p>Join the game hosted through <strong id="joinRelayName"></strong>?</p>
           <label class="name-field">
             <span>Your name</span>
-            <input type="text" id="joinNameInput" class="field" maxlength="20" autocomplete="nickname" spellcheck="false" placeholder="Shown to your opponent" />
+            <input type="text" id="joinNameInput" class="field" autocomplete="nickname" spellcheck="false" placeholder="Shown to your opponent" />
           </label>
           <p class="modal-note">
             Moves are end-to-end encrypted: the relay passes them along but cannot read them.
