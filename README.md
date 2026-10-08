@@ -12,6 +12,14 @@ account. Moves are end-to-end encrypted.
 Playing over a real board instead? [ChessTracker](https://emrahman.github.io/ChessTracker/)
 follows a game played with real pieces on one device.
 
+### Your own copy
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/EMRahman/Farboard)
+
+The button copies this repository into your GitHub account and deploys it to
+your Cloudflare account. Your copy is private until you choose otherwise; the
+app walks you through it under **Get your own copy**.
+
 ## What it does
 
 - **Invite by QR code or link.** **Create invite** shows both; whoever opens it
@@ -153,14 +161,6 @@ The app is published in two places:
   reaches `main`, after the tests pass. It has no relay of its own, so
   `sharedRelay` in `public/js/config.js` points it at the Cloudflare relay,
   whose `ALLOWED_ORIGINS` includes `https://emrahman.github.io`.
-
-### Your own copy
-
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/EMRahman/Farboard)
-
-The button copies this repository into your GitHub account and deploys it to
-your Cloudflare account. Your copy is private until you choose otherwise; the
-app walks you through it under **Get your own copy**.
 
 ## Keyboard shortcuts
 
