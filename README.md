@@ -1,13 +1,18 @@
 # Farboard
 
-Play chess with a friend, near or far.
+[![Farboard — Play chess with anyone, anywhere. Zero accounts. Made possible by Cloudflare Durable Objects.](assets/farboard-splash.png)](https://farboard.ehsanr-web.workers.dev/)
+
+Play chess with a friend, near or far — accountless, instant, and made possible
+by [Cloudflare Durable Objects](https://developers.cloudflare.com/durable-objects/).
 
 **[Open Farboard](https://farboard.ehsanr-web.workers.dev/)**
 (also at [emrahman.github.io/Farboard](https://emrahman.github.io/Farboard/))
 
 Create an invite, and your opponent scans the QR code or opens the link. You
 each play on your own device, wherever you are, with nothing to install and no
-account. Moves are end-to-end encrypted.
+account. Moves and chat are end-to-end encrypted, relayed through stateful
+Cloudflare Durable Objects rooms with WebSocket hibernation so anyone can play
+or host their own copy on Cloudflare's free plan.
 
 Playing over a real board instead? [ChessTracker](https://emrahman.github.io/ChessTracker/)
 follows a game played with real pieces on one device.
@@ -190,6 +195,7 @@ limiting, history), and the relay's rules.
 ## Layout
 
 ```
+assets/                     README imagery (webpage screenshot and marketing splash)
 public/                     the website, exactly as served
   index.html                markup for the board, panels and dialogs
   css/styles.css            styling and the responsive layout
